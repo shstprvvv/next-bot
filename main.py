@@ -42,6 +42,9 @@ SUPPORT_PROMPT = (
     "Ты отвечаешь кратко и по делу от лица службы поддержки NEXT. Всегда будь конкретным и профессиональным."
 )
 
+FAQ_THRESHOLD = 0.85
+FAQ_MATCH_MIN_LEN = 20  # минимальное количество символов во входящем сообщении, чтобы считать FAQ релевантным
+
 def get_memory(user_id):
     if user_id not in memory_store:
         memory_store[user_id] = ConversationBufferMemory(return_messages=True)
@@ -107,7 +110,7 @@ async def handler(event):
         cos_scores = util.pytorch_cos_sim(q_emb, FAQ_EMBEDS)[0]
         best_idx = int(cos_scores.argmax())
         best_score = float(cos_scores[best_idx])
-        if best_score >= 0.7:
+        if best_score >= FAQ_THRESHOLD and len(message_text) >= FAQ_MATCH_MIN_LEN:
             reply = FAQ_ANSWERS[best_idx]
             # Добавляем ответ из FAQ в память
             memory.chat_memory.add_ai_message(reply)
