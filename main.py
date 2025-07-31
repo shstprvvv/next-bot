@@ -1,143 +1,155 @@
 import os
 import logging
+import asyncio
+from collections import defaultdict
 from telethon import TelegramClient, events
-from openai import OpenAI
 from dotenv import load_dotenv
 from langchain.memory import ConversationBufferMemory
-from sentence_transformers import SentenceTransformer, util
-import json
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.prompts import PromptTemplate
+from tools import create_knowledge_base_tool # Импортируем функцию
 
-# Загрузка переменных окружения
+# --- Конфигурация ---
 load_dotenv()
 TELETHON_API_ID = os.getenv('TELETHON_API_ID')
 TELETHON_API_HASH = os.getenv('TELETHON_API_HASH')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+OPENAI_API_BASE = os.getenv('OPENAI_API_BASE')
+MESSAGE_DELAY_SECONDS = 30 # Время ожидания перед ответом
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
+# --- Инициализация клиентов и моделей ---
 client = TelegramClient('user_session', TELETHON_API_ID, TELETHON_API_HASH)
-gpt_client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Загрузка FAQ в память
-with open('faq.json', encoding='utf-8') as f:
-    FAQ = json.load(f)
-FAQ_QUESTIONS = [item['question'] for item in FAQ]
-FAQ_ANSWERS = [item['answer'] for item in FAQ]
-
-# Модель для эмбеддингов
-EMBED_MODEL = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-FAQ_EMBEDS = EMBED_MODEL.encode(FAQ_QUESTIONS, convert_to_tensor=True)
-
-# Хранилище памяти по user_id
-memory_store = {}
-
-SYSTEM_PROMPT = (
-    "Ты — владелец магазина на Wildberries и общаешься с клиентами в переписке. "
-    "Отвечай кратко, понятно и дружелюбно, как живой человек. "
-    "Используй первый лицo ('я', 'мы'), избегай формального и канцелярского стиля. "
-    "Пиши просто, по делу, но с тёплым, человеческим отношением."
+llm = ChatOpenAI(
+    model_name="gpt-4o-mini",
+    temperature=0.2,
+    openai_api_key=OPENAI_API_KEY,
+    base_url=OPENAI_API_BASE
 )
 
-SUPPORT_PROMPT = (
-    "Ты отвечаешь кратко и по делу от лица службы поддержки NEXT. Всегда будь конкретным и профессиональным."
-)
+# Создаем RAG-инструмент, передавая ему ключ и URL
+knowledge_base_tool = create_knowledge_base_tool(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+if knowledge_base_tool is None:
+    logging.error("Не удалось создать инструмент базы знаний. Приложение не может продолжить работу.")
+    exit() # Выходим, если инструмент не создался
 
-FAQ_THRESHOLD = 0.85
-FAQ_MATCH_MIN_LEN = 20  # минимальное количество символов во входящем сообщении, чтобы считать FAQ релевантным
+tools = [knowledge_base_tool]
 
-def get_memory(user_id):
-    if user_id not in memory_store:
-        memory_store[user_id] = ConversationBufferMemory(return_messages=True)
-    return memory_store[user_id]
+# --- Системный промпт для агента ---
+agent_prompt_template = """
+### Роль и Стиль
+Ты — официальный онлайн-консультант техподдержки ТВ-приставок бренда NEXT.
+Твоя главная задача — помочь пользователю. Отвечай всегда вежливо, кратко, информативно и дружелюбно. Объясняй простым языком, без сложных терминов.
 
-def get_faq_or_gpt_answer(question: str) -> str:
-    # 1. Поиск похожего вопроса в FAQ
-    q_emb = EMBED_MODEL.encode(question, convert_to_tensor=True)
-    cos_scores = util.pytorch_cos_sim(q_emb, FAQ_EMBEDS)[0]
-    best_idx = int(cos_scores.argmax())
-    best_score = float(cos_scores[best_idx])
-    if best_score >= 0.7:
-        return FAQ_ANSWERS[best_idx]
-    # 2. Если не найдено — запрос к GPT
-    response = gpt_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": SUPPORT_PROMPT},
-            {"role": "user", "content": question}
-        ],
-        max_tokens=80,
-        temperature=0.5,
-    )
-    return response.choices[0].message.content.strip()
+### Инструкция по работе
+1.  Для ответа на ЛЮБОЙ вопрос о продукте, его функциях или проблемах, **ты ОБЯЗАН сначала использовать инструмент `KnowledgeBaseSearch`**.
+2.  Получив информацию из инструмента, **сформулируй на её основе свой собственный, уникальный ответ**. Не копируй текст из результатов поиска дословно.
+3.  Если инструмент не нашел релевантной информации, вежливо сообщи, что у тебя нет данных по этому вопросу.
+4.  Если после всех предложенных решений проблема пользователя не решается, или если она явно указывает на аппаратный дефект (например, приставка не включается), всегда предлагай оформить возврат через маркетплейс, где была совершена покупка (Wildberries или Ozon).
 
-def generate_support_reply(user_id, message_text):
-    memory = get_memory(user_id)
-    # Добавляем новое сообщение пользователя в память
-    memory.chat_memory.add_user_message(message_text)
-    # Формируем историю для GPT
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-    ]
-    for msg in memory.chat_memory.messages:
-        if msg.type == 'human':
-            messages.append({"role": "user", "content": msg.content})
-        else:
-            messages.append({"role": "assistant", "content": msg.content})
-    response = gpt_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        max_tokens=80,
-        temperature=0.5,
-    )
-    reply = response.choices[0].message.content.strip()
-    # Добавляем ответ ассистента в память
-    memory.chat_memory.add_ai_message(reply)
-    return reply
+### Инструменты
+У тебя есть доступ к следующим инструментам:
+{tools}
 
+Чтобы использовать инструмент, используй следующий формат:
+```
+Thought: Мне нужно найти информацию по вопросу пользователя. Я использую KnowledgeBaseSearch.
+Action: {tool_names}
+Action Input: Вопрос пользователя как есть.
+Observation: Результат поиска в базе знаний.
+```
+
+Когда у тебя есть финальный ответ, используй формат:
+```
+Thought: Я нашел всю необходимую информацию и готов дать ответ.
+Final Answer: Финальный ответ для пользователя, сгенерированный на основе полученных данных и в соответствии со стилем общения.
+```
+
+Начинай!
+
+История переписки:
+{chat_history}
+
+Новый вопрос от пользователя: {input}
+{agent_scratchpad}
+"""
+agent_prompt = PromptTemplate.from_template(agent_prompt_template)
+
+# --- Управление агентами и памятью ---
+agent_store = {}
+
+def get_or_create_agent(user_id: int):
+    """Создает или возвращает существующий агент для пользователя."""
+    if user_id not in agent_store:
+        logging.info(f"Создание нового агента для пользователя {user_id}")
+        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        agent = create_react_agent(llm, tools, agent_prompt)
+        agent_executor = AgentExecutor(
+            agent=agent, 
+            tools=tools, 
+            memory=memory, 
+            verbose=True,
+            handle_parsing_errors=True # Добавляем обработчик ошибок парсинга
+        )
+        agent_store[user_id] = agent_executor
+    return agent_store[user_id]
+
+# --- Управление отложенными задачами и сообщениями ---
+user_tasks = {}
+user_messages = defaultdict(list)
+
+async def process_user_messages(user_id, event):
+    """Задача, которая ждет, объединяет сообщения и отвечает."""
+    await asyncio.sleep(MESSAGE_DELAY_SECONDS)
+    
+    if user_id not in user_messages:
+        return # Сообщения были очищены, задача отменена
+        
+    full_message = " ".join(user_messages.pop(user_id, []))
+    logging.info(f"Обработка объединенного сообщения от {user_id}: '{full_message}'")
+
+    try:
+        agent_executor = get_or_create_agent(user_id)
+        response = await agent_executor.ainvoke({"input": full_message})
+        reply = response.get("output", "Извините, я не смог обработать ваш запрос.")
+        
+        reply = reply.strip().replace("```", "")
+        
+        await event.reply(reply)
+        logging.info(f"Отправлен ответ для {user_id}: '{reply}'")
+    except Exception as e:
+        logging.error(f"Ошибка при обработке сообщения для {user_id}: {e}", exc_info=True)
+        await event.reply("Произошла ошибка. Пожалуйста, попробуйте позже.")
+    finally:
+        # Убираем задачу из хранилища после выполнения
+        user_tasks.pop(user_id, None)
+
+# --- Обработчик сообщений Telegram ---
 @client.on(events.NewMessage(incoming=True, outgoing=False))
 async def handler(event):
+    """Обрабатывает входящие сообщения с задержкой."""
     sender = await event.get_sender()
     user_id = sender.id
-    sender_name = getattr(sender, 'username', None) or getattr(sender, 'first_name', 'Unknown')
     message_text = event.raw_text
-    logging.info(f"Получено сообщение от {sender_name}: {message_text}")
-    try:
-        memory = get_memory(user_id)
-        # Добавляем сообщение пользователя в память
-        memory.chat_memory.add_user_message(message_text)
-        # Пробуем найти ответ в FAQ
-        q_emb = EMBED_MODEL.encode(message_text, convert_to_tensor=True)
-        cos_scores = util.pytorch_cos_sim(q_emb, FAQ_EMBEDS)[0]
-        best_idx = int(cos_scores.argmax())
-        best_score = float(cos_scores[best_idx])
-        if best_score >= FAQ_THRESHOLD and len(message_text) >= FAQ_MATCH_MIN_LEN:
-            reply = FAQ_ANSWERS[best_idx]
-            # Добавляем ответ из FAQ в память
-            memory.chat_memory.add_ai_message(reply)
-        else:
-            # Формируем историю для GPT
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-            ]
-            for msg in memory.chat_memory.messages:
-                if msg.type == 'human':
-                    messages.append({"role": "user", "content": msg.content})
-                else:
-                    messages.append({"role": "assistant", "content": msg.content})
-            response = gpt_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                max_tokens=80,
-                temperature=0.5,
-            )
-            reply = response.choices[0].message.content.strip()
-            memory.chat_memory.add_ai_message(reply)
-        await event.reply(reply)
-        logging.info(f"Отправлен ответ: {reply}")
-    except Exception as e:
-        logging.error(f"Ошибка при генерации или отправке ответа: {e}")
+    
+    logging.info(f"Получено сообщение от {user_id}: '{message_text}'. Добавлено в очередь.")
+    
+    # Добавляем сообщение в "пачку"
+    user_messages[user_id].append(message_text)
+    
+    # Если для этого пользователя уже есть таймер, отменяем его
+    if user_id in user_tasks:
+        user_tasks[user_id].cancel()
+    
+    # Запускаем новый таймер (новую задачу)
+    task = asyncio.create_task(process_user_messages(user_id, event))
+    user_tasks[user_id] = task
 
+# --- Запуск приложения ---
 if __name__ == "__main__":
-    print("Запуск... Если вы впервые запускаете скрипт, потребуется авторизация через Telegram.")
+    print("Запуск Telegram-ассистента...")
     with client:
         client.run_until_disconnected() 

@@ -3,4 +3,5 @@ openai
 python-dotenv
 langchain
 sentence-transformers
-tqdm 
+tqdm
+langchain-openai 
