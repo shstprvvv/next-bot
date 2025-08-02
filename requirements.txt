@@ -2,6 +2,7 @@ telethon
 openai
 python-dotenv
 langchain
-sentence-transformers
 tqdm
-langchain-openai 
+langchain-openai
+langchain-community
+faiss-cpu
