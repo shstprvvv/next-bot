@@ -26,7 +26,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.info("[Main] Конфигурация загружена.")
 
 # --- Инициализация клиентов и моделей ---
-client = TelegramClient('local_session', TELETHON_API_ID, TELETHON_API_HASH)
+client = TelegramClient('user_session', TELETHON_API_ID, TELETHON_API_HASH)
 llm = ChatOpenAI(
     model_name="gpt-4o-mini",
     temperature=0.2,
@@ -231,44 +231,41 @@ async def process_user_messages(user_id, event):
     finally:
         user_tasks.pop(user_id, None)
 
-# --- Обработчик сообщений Telegram (ОТКЛЮЧЕНО ДЛЯ ЛОКАЛЬНОГО ТЕСТИРОВАНИЯ) ---
-# @client.on(events.NewMessage(incoming=True, outgoing=False))
-# async def handler(event):
-#     """Обрабатывает входящие сообщения с задержкой."""
-#     sender = await event.get_sender()
-#     user_id = sender.id
-#     message_text = event.raw_text
+# --- Обработчик сообщений Telegram ---
+@client.on(events.NewMessage(incoming=True, outgoing=False))
+async def handler(event):
+    """Обрабатывает входящие сообщения с задержкой."""
+    sender = await event.get_sender()
+    user_id = sender.id
+    message_text = event.raw_text
     
-#     if user_id == 0:
-#         return
+    if user_id == 0: # Игнорируем системного агента
+        return
 
-#     logging.info(f"[Telegram] Получено сообщение от {user_id}: '{message_text}'. Добавлено в очередь.")
+    logging.info(f"[Telegram] Получено сообщение от {user_id}: '{message_text}'. Добавлено в очередь.")
     
-#     user_messages[user_id].append(message_text)
+    user_messages[user_id].append(message_text)
     
-#     if user_id in user_tasks:
-#         user_tasks[user_id].cancel()
+    if user_id in user_tasks:
+        user_tasks[user_id].cancel()
     
-#     task = asyncio.create_task(process_user_messages(user_id, event))
-#     user_tasks[user_id] = task
+    task = asyncio.create_task(process_user_messages(user_id, event))
+    user_tasks[user_id] = task
 
 # --- Запуск приложения ---
 async def main():
     """Основная функция для запуска бота и фоновых задач."""
-    print("[Main] Запуск Telegram-ассистента в режиме 'только Wildberries'...")
+    print("[Main] Запуск Telegram-ассистента...")
     
-    asyncio.create_task(background_wb_checker())
+    # Запускаем фоновую задачу для WB, если есть ключ
+    if WB_API_KEY:
+        asyncio.create_task(background_wb_checker())
     
-    # Запускаем клиент Telegram (ОТКЛЮЧЕНО ДЛЯ ЛОКАЛЬНОГО ТЕСТИРОВАНИЯ)
-    # await client.start(phone=lambda: os.getenv('TELETHON_PHONE'))
-    # print("[Main] Клиент Telegram запущен.")
-    # await client.run_until_disconnected()
-
-    # Чтобы приложение не закрывалось сразу, добавляем бесконечное ожидание
-    while True:
-        await asyncio.sleep(3600) # Просто спим, пока фоновая задача работает
+    # Запускаем клиент Telegram
+    await client.start(phone=lambda: os.getenv('TELETHON_PHONE'))
+    print("[Main] Клиент Telegram запущен.")
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    # Убираем with client, так как клиент не используется
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    with client:
+        client.loop.run_until_complete(main())
