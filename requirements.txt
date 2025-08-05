@@ -1,8 +1,8 @@
 telethon
-openai
 python-dotenv
 langchain
-tqdm
-langchain-openai
 langchain-community
+langchain-openai
+openai
 faiss-cpu
+requests
