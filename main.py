@@ -25,6 +25,7 @@ TELETHON_API_HASH = os.getenv('TELETHON_API_HASH')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENAI_API_BASE = os.getenv('OPENAI_API_BASE')
 WB_API_KEY = os.getenv('WB_API_KEY')
+TELEGRAM_PASSWORD = os.getenv('TELEGRAM_PASSWORD')
 MESSAGE_DELAY_SECONDS = 30
 WB_CHECK_INTERVAL_SECONDS = 900
 logging.info("[Main] Конфигурация загружена.")
@@ -266,7 +267,10 @@ async def main():
         asyncio.create_task(background_wb_checker())
     
     # Запускаем клиент Telegram
-    await client.start(phone=lambda: os.getenv('TELETHON_PHONE'))
+    await client.start(
+        phone=lambda: os.getenv('TELETHON_PHONE'),
+        password=lambda: os.getenv('TELEGRAM_PASSWORD')
+    )
     print("[Main] Клиент Telegram запущен.")
     await client.run_until_disconnected()
 
