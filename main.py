@@ -11,6 +11,13 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
 from tools import create_knowledge_base_tool, get_unanswered_feedbacks_tool, post_feedback_answer_tool
 
+# --- Настройка логирования (ВАЖНО: должна быть в самом начале) ---
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
 # --- Конфигурация ---
 load_dotenv()
 TELETHON_API_ID = os.getenv('TELETHON_API_ID')
@@ -20,9 +27,6 @@ OPENAI_API_BASE = os.getenv('OPENAI_API_BASE')
 WB_API_KEY = os.getenv('WB_API_KEY')
 MESSAGE_DELAY_SECONDS = 30
 WB_CHECK_INTERVAL_SECONDS = 900
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.info("[Main] Конфигурация загружена.")
 
 # --- Инициализация клиентов и моделей ---
