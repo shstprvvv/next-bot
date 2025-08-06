@@ -191,7 +191,7 @@ def get_or_create_agent(user_id: int, is_background_agent=False):
             agent=agent,
             tools=all_tools,
             memory=memory,
-            verbose=False,
+            verbose=True,
             handle_parsing_errors=True
         )
         agent_store[user_id] = agent_executor
