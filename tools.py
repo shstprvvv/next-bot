@@ -95,7 +95,11 @@ def post_feedback_answer_tool():
         """Принимает JSON-строку с 'feedback_id' и 'text'."""
         try:
             logging.info(f"[WBTools] Вызван инструмент для отправки ответа. Вход: {input_str}")
-            data = json.loads(input_str)
+            
+            # ИСПРАВЛЕНО: Убираем лишние кавычки, которые может добавить агент
+            cleaned_input = input_str.strip("''\"\"")
+            
+            data = json.loads(cleaned_input)
             feedback_id = data.get("feedback_id")
             text = data.get("text")
             
