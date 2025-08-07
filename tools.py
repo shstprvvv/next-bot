@@ -72,8 +72,13 @@ def get_unanswered_feedbacks_tool(date_provider=None):
             logging.info(f"[WBTools] Используется фильтр по дате: {date_from.isoformat()}")
 
         feedbacks = get_unanswered_feedbacks(date_from=date_from)
+
         if feedbacks is None:
             return "Не удалось получить отзывы. Возможно, проблема с API ключом или сетью."
+        
+        if not feedbacks:
+            return "Новых неотвеченных отзывов и вопросов (с учетом фильтра по дате) нет."
+            
         # ИСПРАВЛЕНО: Теперь всегда возвращаем JSON, даже если он пустой.
         # Агент сам должен решать, что делать с пустым списком.
         return json.dumps(feedbacks, ensure_ascii=False, indent=2)
