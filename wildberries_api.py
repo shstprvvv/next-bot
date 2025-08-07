@@ -35,21 +35,12 @@ def get_unanswered_feedbacks(max_items=1, date_from=None):
     # Добавляем фильтр по дате, если он передан
     if date_from:
         params['dateFrom'] = int(date_from.timestamp())
-
-    # --- Начало блока отладки ---
-    logging.info(f"[WildberriesAPI_DEBUG] Параметры запроса: {params}")
-    # --- Конец блока отладки ---
-    
+        
     try:
         response = requests.get(f"{BASE_URL}/feedbacks", headers=HEADERS, params=params)
         response.raise_for_status()
-
-        # --- Начало блока отладки ---
-        raw_response = response.json()
-        logging.info(f"[WildberriesAPI_DEBUG] Код ответа: {response.status_code}. Сырой ответ: {raw_response}")
-        # --- Конец блока отладки ---
-
-        data = raw_response
+        logging.info(f"[WildberriesAPI] Запрос неотвеченных отзывов: {response.status_code}")
+        data = response.json()
         return data.get('data', {}).get('feedbacks', [])
     except requests.exceptions.RequestException as e:
         error_details = ""

@@ -47,9 +47,10 @@ if knowledge_base_tool is None:
     exit()
 
 wb_tools = []
-if WB_API_KEY:
-    wb_tools.extend([get_unanswered_feedbacks_tool(lambda: STARTUP_TIME), post_feedback_answer_tool()])
-    logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
+    if WB_API_KEY:
+        # ИСПРАВЛЕНО: Убрана передача STARTUP_TIME, чтобы отвечать на все отзывы
+        wb_tools.extend([get_unanswered_feedbacks_tool(), post_feedback_answer_tool()])
+        logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
 else:
     logging.warning("[Main] Ключ WB_API_KEY не найден. Функционал Wildberries будет отключен.")
 
@@ -184,7 +185,7 @@ async def background_wb_checker():
 
     while True:
         try:
-            logging.info(f"[BackgroundWB] Инициирую проверку отзывов (только новые с {STARTUP_TIME.isoformat()}).")
+            logging.info(f"[BackgroundWB] Инициирую проверку всех неотвеченных отзывов.")
             await agent_executor.ainvoke({"input": "проверь отзывы"})
         except Exception as e:
             logging.error(f"[BackgroundWB] Ошибка в фоновой задаче: {e}", exc_info=True)
