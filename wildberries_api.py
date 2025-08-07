@@ -65,8 +65,8 @@ def post_feedback_answer(feedback_id: str, text: str):
         "text": text
     }
     try:
-        # Используем PATCH, как указано в некоторых неофициальных доках
-        response = requests.patch(f"{BASE_URL}/feedbacks", headers=HEADERS, json=body)
+        # ИСПРАВЛЕНО: Используем PUT и правильный URL /feedback
+        response = requests.put(f"{BASE_URL}/feedback", headers=HEADERS, json=body)
         response.raise_for_status()
         logging.info(f"[WildberriesAPI] Отправка ответа на отзыв {feedback_id}: {response.status_code}")
         return response.json()
