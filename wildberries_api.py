@@ -4,6 +4,7 @@ import os
 import requests
 import logging
 from dotenv import load_dotenv
+from typing import List, Optional, Dict, Any
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ HEADERS = {
     'Authorization': f'Bearer {WB_API_KEY}'
 }
 
-def get_unanswered_feedbacks(max_items=1, date_from=None):
+def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[list]:
     """
     Получает список неотвеченных отзывов и вопросов, начиная с определенной даты.
     """
@@ -52,9 +53,42 @@ def get_unanswered_feedbacks(max_items=1, date_from=None):
         logging.error(f"[WildberriesAPI] Ошибка при получении отзывов: {e}. Детали: {error_details}")
         return None
 
-def post_feedback_answer(feedback_id: str, text: str):
+def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[list]:
+    """Получает список неотвеченных вопросов покупателей."""
+    if not WB_API_KEY:
+        logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
+        return None
+
+    params = {
+        "isAnswered": "false",
+        "take": max_items,
+        "skip": 0,
+        "order": "dateAsc",
+    }
+    if date_from:
+        params['dateFrom'] = int(date_from.timestamp())
+
+    try:
+        response = requests.get(f"{BASE_URL}/questions", headers=HEADERS, params=params)
+        response.raise_for_status()
+        logging.info(f"[WildberriesAPI] Запрос неотвеченных вопросов: {response.status_code}")
+        data = response.json()
+        return data.get('data', {}).get('questions', [])
+    except requests.exceptions.RequestException as e:
+        error_details = ""
+        if e.response is not None:
+            try:
+                error_details = e.response.json()
+            except json.JSONDecodeError:
+                error_details = e.response.text
+        logging.error(f"[WildberriesAPI] Ошибка при получении вопросов: {e}. Детали: {error_details}")
+        return None
+
+def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Отправляет ответ на отзыв или вопрос.
+    Если item_type == 'question' → использует /questions/answer, иначе /feedbacks/answer.
+    При item_type=None сначала пробует отзыв, при неуспехе пробует вопрос.
     """
     if not WB_API_KEY:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
@@ -64,22 +98,32 @@ def post_feedback_answer(feedback_id: str, text: str):
         "id": feedback_id,
         "text": text
     }
-    try:
-        # ИСПРАВЛЕНО: Используем POST и правильный URL /feedbacks/answer из официальной документации
-        response = requests.post(f"{BASE_URL}/feedbacks/answer", headers=HEADERS, json=body)
-        response.raise_for_status()
-        logging.info(f"[WildberriesAPI] Отправка ответа на отзыв {feedback_id}: {response.status_code}")
-        
-        # WB API возвращает 204 No Content при успехе, у которого нет тела.
-        if response.status_code == 204:
-            return {"result": "success"} # Возвращаем успешный результат
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        error_details = ""
-        if e.response is not None:
-            try:
-                error_details = e.response.json()
-            except json.JSONDecodeError:
-                error_details = e.response.text
-        logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на отзыв {feedback_id}: {e}. Детали: {error_details}")
-        return None
+    def _post(url_suffix: str, log_label: str):
+        try:
+            response = requests.post(f"{BASE_URL}/{url_suffix}", headers=HEADERS, json=body)
+            response.raise_for_status()
+            logging.info(f"[WildberriesAPI] Отправка ответа на {log_label} {feedback_id}: {response.status_code}")
+            if response.status_code == 204:
+                return {"result": "success"}
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            error_details = ""
+            if e.response is not None:
+                try:
+                    error_details = e.response.json()
+                except json.JSONDecodeError:
+                    error_details = e.response.text
+            logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
+            return None
+
+    # Явно задан тип вопроса
+    if item_type == 'question':
+        return _post("questions/answer", "вопрос")
+
+    # По умолчанию пробуем как отзыв
+    result = _post("feedbacks/answer", "отзыв")
+    if result is None and item_type is None:
+        # Фолбэк: пробуем как вопрос
+        fallback = _post("questions/answer", "вопрос (fallback)")
+        return fallback
+    return result

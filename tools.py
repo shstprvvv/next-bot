@@ -5,7 +5,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import TextLoader
 from langchain_openai import OpenAIEmbeddings
-from wildberries_api import get_unanswered_feedbacks, post_feedback_answer
+from wildberries_api import get_unanswered_feedbacks, get_unanswered_questions, post_feedback_answer
 
 def create_knowledge_base_tool(api_key: str, base_url: str = None):
     """Создает и возвращает RAG-инструмент."""
@@ -71,17 +71,27 @@ def get_unanswered_feedbacks_tool(date_provider=None):
             date_from = date_provider()
             logging.info(f"[WBTools] Используется фильтр по дате: {date_from.isoformat()}")
 
-        feedbacks = get_unanswered_feedbacks(date_from=date_from)
+        feedbacks = get_unanswered_feedbacks(date_from=date_from) or []
+        questions = get_unanswered_questions(date_from=date_from) or []
 
-        if feedbacks is None:
+        # Пометим тип, чтобы агент мог различать, если нужно
+        for f in feedbacks:
+            f.setdefault("type", "feedback")
+        for q in questions:
+            q.setdefault("type", "question")
+            # Приведём к общему виду поля текста, если отличается
+            if "text" not in q and "questionText" in q:
+                q["text"] = q.get("questionText", "")
+
+        items = feedbacks + questions
+
+        if feedbacks is None and questions is None:
             return "Не удалось получить отзывы. Возможно, проблема с API ключом или сетью."
         
-        if not feedbacks:
-            return "Новых неотвеченных отзывов и вопросов (с учетом фильтра по дате) нет."
+        if not items:
+            return "Новых неотвеченных отзывов и вопросов нет."
             
-        # ИСПРАВЛЕНО: Теперь всегда возвращаем JSON, даже если он пустой.
-        # Агент сам должен решать, что делать с пустым списком.
-        return json.dumps(feedbacks, ensure_ascii=False, indent=2)
+        return json.dumps(items, ensure_ascii=False, indent=2)
 
     return Tool(
         name="GetUnansweredFeedbacks",
@@ -102,16 +112,17 @@ def post_feedback_answer_tool():
             data = json.loads(cleaned_input)
             feedback_id = data.get("feedback_id")
             text = data.get("text")
+            item_type = data.get("type")  # feedback | question | None
             
             if not feedback_id or not text:
                 return "Ошибка: в запросе должны быть 'feedback_id' и 'text'."
 
-            result = post_feedback_answer(feedback_id, text)
+            result = post_feedback_answer(feedback_id, text, item_type=item_type)
             
             if result is None:
                 return f"Не удалось отправить ответ на отзыв {feedback_id}."
             
-            return f"Ответ на отзыв {feedback_id} успешно отправлен."
+            return f"Ответ отправлен ({item_type or 'auto'}): {feedback_id}."
 
         except json.JSONDecodeError:
             return "Ошибка: Неверный формат JSON. Ожидается объект с ключами 'feedback_id' и 'text'."
