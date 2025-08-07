@@ -69,6 +69,10 @@ def post_feedback_answer(feedback_id: str, text: str):
         response = requests.post(f"{BASE_URL}/feedbacks/answer", headers=HEADERS, json=body)
         response.raise_for_status()
         logging.info(f"[WildberriesAPI] Отправка ответа на отзыв {feedback_id}: {response.status_code}")
+        
+        # WB API возвращает 204 No Content при успехе, у которого нет тела.
+        if response.status_code == 204:
+            return {"result": "success"} # Возвращаем успешный результат
         return response.json()
     except requests.exceptions.RequestException as e:
         error_details = ""
