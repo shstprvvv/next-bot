@@ -47,10 +47,10 @@ if knowledge_base_tool is None:
     exit()
 
 wb_tools = []
-    if WB_API_KEY:
-        # ИСПРАВЛЕНО: Убрана передача STARTUP_TIME, чтобы отвечать на все отзывы
-        wb_tools.extend([get_unanswered_feedbacks_tool(), post_feedback_answer_tool()])
-        logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
+if WB_API_KEY:
+    # ИСПРАВЛЕНО: Убрана передача STARTUP_TIME, чтобы отвечать на все отзывы
+    wb_tools.extend([get_unanswered_feedbacks_tool(), post_feedback_answer_tool()])
+    logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
 else:
     logging.warning("[Main] Ключ WB_API_KEY не найден. Функционал Wildberries будет отключен.")
 
