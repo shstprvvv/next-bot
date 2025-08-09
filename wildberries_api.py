@@ -116,14 +116,14 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
             logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
             return None
 
-    # Явно задан тип вопроса
+    # Явно задан тип
     if item_type == 'question':
         return _post("questions/answer", "вопрос")
+    if item_type in ('feedback', 'review'):
+        return _post("feedbacks/answer", "отзыв")
 
-    # По умолчанию пробуем как отзыв
-    result = _post("feedbacks/answer", "отзыв")
-    if result is None and item_type is None:
-        # Фолбэк: пробуем как вопрос
-        fallback = _post("questions/answer", "вопрос (fallback)")
-        return fallback
-    return result
+    # Тип не задан: сначала пробуем как вопрос (чаще проблема была именно с вопросами), затем как отзыв
+    result_q = _post("questions/answer", "вопрос (auto)")
+    if result_q is not None:
+        return result_q
+    return _post("feedbacks/answer", "отзыв (auto)")

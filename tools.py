@@ -56,6 +56,8 @@ def create_knowledge_base_tool(api_key: str, base_url: str = None):
 
 # --- Инструменты для Wildberries ---
 
+_WB_ID_TO_TYPE_CACHE = {}
+
 def get_unanswered_feedbacks_tool(date_provider=None):
     """
     Инструмент для получения неотвеченных отзывов.
@@ -84,6 +86,12 @@ def get_unanswered_feedbacks_tool(date_provider=None):
                 q["text"] = q.get("questionText", "")
 
         items = feedbacks + questions
+        # Кэшируем типы для последующей отправки
+        try:
+            for it in items:
+                _WB_ID_TO_TYPE_CACHE[it.get("id")] = it.get("type")
+        except Exception:
+            pass
 
         if feedbacks is None and questions is None:
             return "Не удалось получить отзывы. Возможно, проблема с API ключом или сетью."
@@ -113,6 +121,9 @@ def post_feedback_answer_tool():
             feedback_id = data.get("feedback_id")
             text = data.get("text")
             item_type = data.get("type")  # feedback | question | None
+            if not item_type:
+                # Попробуем определить тип из кэша по id
+                item_type = _WB_ID_TO_TYPE_CACHE.get(feedback_id)
             
             if not feedback_id or not text:
                 return "Ошибка: в запросе должны быть 'feedback_id' и 'text'."
