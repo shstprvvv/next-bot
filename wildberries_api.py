@@ -85,11 +85,7 @@ def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[li
         return None
 
 def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """
-    Отправляет ответ на отзыв или вопрос.
-    Если item_type == 'question' → использует /questions/answer, иначе /feedbacks/answer.
-    При item_type=None сначала пробует отзыв, при неуспехе пробует вопрос.
-    """
+    """Отправляет ответ на отзыв или вопрос (единый эндпоинт /feedbacks/answer)."""
     if not WB_API_KEY:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
         return None
@@ -116,14 +112,5 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
             logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
             return None
 
-    # Явно задан тип
-    if item_type == 'question':
-        return _post("questions/answer", "вопрос")
-    if item_type in ('feedback', 'review'):
-        return _post("feedbacks/answer", "отзыв")
-
-    # Тип не задан: сначала пробуем как вопрос (чаще проблема была именно с вопросами), затем как отзыв
-    result_q = _post("questions/answer", "вопрос (auto)")
-    if result_q is not None:
-        return result_q
-    return _post("feedbacks/answer", "отзыв (auto)")
+    # Независимо от типа используем единый эндпоинт для публикации ответа
+    return _post("feedbacks/answer", "отзыв")
