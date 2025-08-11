@@ -150,6 +150,11 @@ async def background_wb_checker():
 
     while True:
         try:
+            # ОЧИЩАЕМ ПАМЯТЬ ПЕРЕД КАЖДОЙ ПРОВЕРКОЙ, ЧТОБЫ ИЗБЕЖАТЬ КЭШИРОВАНИЯ РЕШЕНИЙ
+            if agent_executor.memory:
+                agent_executor.memory.clear()
+                logging.info("[BackgroundWB] Память фонового агента очищена перед новой проверкой.")
+
             logging.info(f"[BackgroundWB] Инициирую проверку всех неотвеченных отзывов и вопросов.")
             await agent_executor.ainvoke({"input": "проверь отзывы и вопросы"})
         except Exception as e:
