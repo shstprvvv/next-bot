@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 from telethon import TelegramClient, events
 from dotenv import load_dotenv
@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
 from tools import create_knowledge_base_tool, get_unanswered_feedbacks_tool, post_feedback_answer_tool
+import json
 
 # --- Настройка логирования (ВАЖНО: должна быть в самом начале) ---
 logging.basicConfig(
@@ -27,7 +28,7 @@ OPENAI_API_BASE = os.getenv('OPENAI_API_BASE')
 WB_API_KEY = os.getenv('WB_API_KEY')
 TELEGRAM_PASSWORD = os.getenv('TELEGRAM_PASSWORD')
 MESSAGE_DELAY_SECONDS = 30
-WB_CHECK_INTERVAL_SECONDS = 900
+WB_CHECK_INTERVAL_SECONDS = 300
 logging.info("[Main] Конфигурация загружена.")
 
 # --- Инициализация клиентов и моделей ---
@@ -83,13 +84,17 @@ Final Answer: Финальный ответ для пользователя.
 # Специализированный промпт для ответов на отзывы и вопросы в Wildberries
 wb_agent_prompt_template = """Ты — ассистент, который отвечает на отзывы и вопросы на Wildberries.
 
-1. Используй `GetUnansweredFeedbacks`, чтобы получить список неотвеченных элементов (и отзывы, и вопросы).
-2. Если список пуст, используй `Final Answer: Новых отзывов и вопросов нет.`
-3. Если элементы есть, возьми ТОЛЬКО ПЕРВЫЙ.
-4. Используй `KnowledgeBaseSearch` с текстом элемента, чтобы найти информацию для ответа.
-5. Сгенерируй вежливый, полезный и продающий ответ (можно использовать эмодзи).
-6. Используй `PostFeedbackAnswer`, чтобы отправить ответ. В `Action Input` передай JSON-строку с ключами: feedback_id (ID элемента) и text (текст ответа). Не добавляй лишних кавычек вокруг JSON.
-7. После одного ответа заверши работу.
+Твоя задача — сгенерировать и отправить ответ.
+
+- Если в команде ({input}) уже дан JSON с отзывом/вопросом, используй его. Не вызывай GetUnansweredFeedbacks.
+- Если в команде дана общая инструкция "проверь отзывы", то сначала используй инструмент `GetUnansweredFeedbacks`. Если нашёл что-то, возьми ПЕРВЫЙ элемент и работай с ним.
+
+Порядок действий для ответа:
+1. Используй `KnowledgeBaseSearch` с текстом отзыва/вопроса, чтобы найти информацию для ответа.
+2. Сгенерируй вежливый, полезный и продающий ответ (можно использовать эмодзи).
+3. Используй `PostFeedbackAnswer`, чтобы отправить ответ. В `Action Input` передай JSON-строку с ключами: `feedback_id` (ID элемента) и `text` (текст твоего ответа).
+
+Если неотвеченных элементов нет, твой финальный ответ должен быть "Новых отзывов и вопросов нет.".
 
 Инструменты:
 {tools}
@@ -148,18 +153,66 @@ async def background_wb_checker():
     logging.info("[BackgroundWB] Запуск фоновой задачи для проверки отзывов Wildberries...")
     agent_executor = get_or_create_agent(user_id=0, is_background_agent=True)
 
+    # Используем deque для хранения ID последних 100 обработанных элементов,
+    # чтобы избежать повторных ответов из-за задержки API WB.
+    recently_answered_ids = deque(maxlen=100)
+    
+    # Получаем инстанс инструмента для прямого вызова
+    unanswered_tool = get_unanswered_feedbacks_tool()
+
     while True:
         try:
-            # ОЧИЩАЕМ ПАМЯТЬ ПЕРЕД КАЖДОЙ ПРОВЕРКОЙ, ЧТОБЫ ИЗБЕЖАТЬ КЭШИРОВАНИЯ РЕШЕНИЙ
             if agent_executor.memory:
                 agent_executor.memory.clear()
                 logging.info("[BackgroundWB] Память фонового агента очищена перед новой проверкой.")
 
-            logging.info(f"[BackgroundWB] Инициирую проверку всех неотвеченных отзывов и вопросов.")
-            await agent_executor.ainvoke({"input": "проверь отзывы и вопросы"})
+            logging.info("[BackgroundWB] Получение списка неотвеченных элементов...")
+            # Прямой вызов инструмента для получения списка
+            items_json = unanswered_tool.func("")
+            
+            try:
+                items = json.loads(items_json)
+            except (json.JSONDecodeError, TypeError):
+                items = []
+
+            if not items:
+                logging.info("[BackgroundWB] Новых неотвеченных элементов нет.")
+            else:
+                logging.info(f"[BackgroundWB] Получено {len(items)} элементов. Поиск нового для ответа...")
+                
+                # Ищем первый элемент, на который мы еще не отвечали в этой сессии
+                item_to_answer = None
+                for item in items:
+                    if item.get("id") not in recently_answered_ids:
+                        item_to_answer = item
+                        break
+                
+                if item_to_answer:
+                    item_id = item_to_answer.get("id")
+                    logging.info(f"[BackgroundWB] Найден новый элемент для ответа. ID: {item_id}")
+                    
+                    # Формируем конкретный запрос для агента, чтобы он ответил на этот элемент
+                    input_prompt = (
+                        f"Ответь на следующий отзыв/вопрос с ID {item_id}. "
+                        f"Вот его содержимое в формате JSON: {json.dumps(item_to_answer, ensure_ascii=False)}"
+                    )
+                    
+                    response = await agent_executor.ainvoke({"input": input_prompt})
+                    
+                    # Если ответ был успешным, добавляем ID в кэш
+                    if response and response.get("output") and "не удалось" not in response.get("output").lower():
+                        logging.info(f"[BackgroundWB] Ответ на ID {item_id} считается успешным. Добавляю в кэш недавно отвеченных.")
+                        recently_answered_ids.append(item_id)
+                    else:
+                        logging.warning(f"[BackgroundWB] Попытка ответа на ID {item_id} могла быть неуспешной. Ответ агента: {response.get('output')}")
+                        
+                else:
+                    logging.info("[BackgroundWB] Все полученные элементы уже были недавно обработаны. Пропускаем цикл.")
+
         except Exception as e:
             logging.error(f"[BackgroundWB] Ошибка в фоновой задаче: {e}", exc_info=True)
         
+        logging.info(f"[BackgroundWB] Следующая проверка через {WB_CHECK_INTERVAL_SECONDS} секунд.")
         await asyncio.sleep(WB_CHECK_INTERVAL_SECONDS)
 
 # --- Управление отложенными задачами и сообщениями ---
