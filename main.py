@@ -13,8 +13,8 @@ from tools import create_knowledge_base_tool, get_unanswered_feedbacks_tool, pos
 
 # --- Настройка логирования (ВАЖНО: должна быть в самом начале) ---
 logging.basicConfig(
-    level=logging.INFO, 
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
@@ -150,8 +150,8 @@ async def background_wb_checker():
 
     while True:
         try:
-            logging.info(f"[BackgroundWB] Инициирую проверку всех неотвеченных отзывов.")
-            await agent_executor.ainvoke({"input": "проверь отзывы"})
+            logging.info(f"[BackgroundWB] Инициирую проверку всех неотвеченных отзывов и вопросов.")
+            await agent_executor.ainvoke({"input": "проверь отзывы и вопросы"})
         except Exception as e:
             logging.error(f"[BackgroundWB] Ошибка в фоновой задаче: {e}", exc_info=True)
         

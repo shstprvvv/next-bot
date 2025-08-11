@@ -1,5 +1,7 @@
 import logging
 import json
+import re
+import ast
 from langchain.tools import Tool
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -112,18 +114,47 @@ def post_feedback_answer_tool():
     def run_tool(input_str: str) -> str:
         """Принимает JSON-строку с 'feedback_id' и 'text'."""
         try:
-            logging.info(f"[WBTools] Вызван инструмент для отправки ответа. Вход: {input_str}")
+            logging.info(f"[WBTools] Вызван инструмент для отправки ответа. Сырой вход: {input_str}")
             
-            # ИСПРАВЛЕНО: Убираем лишние кавычки, которые может добавить агент
-            cleaned_input = input_str.strip("''\"\"")
-            
-            data = json.loads(cleaned_input)
+            # ИСПРАВЛЕНО: Убираем лишние кавычки/кодовые блоки, которые может добавить агент
+            cleaned_input = input_str.strip().strip("''\"\"")
+            cleaned_input = cleaned_input.strip('`').replace('\n', ' ').strip()
+            logging.info(f"[WBTools] После предварительной очистки: {cleaned_input}")
+
+            def parse_payload(s: str):
+                # 1) Прямая попытка JSON
+                try:
+                    return json.loads(s)
+                except json.JSONDecodeError:
+                    pass
+                # 2) Вырезаем первую фигурную скобку до последней закрывающей
+                try:
+                    start = s.find('{')
+                    end = s.rfind('}')
+                    if start != -1 and end != -1 and end > start:
+                        candidate = s[start:end+1]
+                        return json.loads(candidate)
+                except Exception:
+                    pass
+                # 3) Пытаемся распарсить как python-литерал и привести к dict
+                try:
+                    obj = ast.literal_eval(s)
+                    if isinstance(obj, dict):
+                        return obj
+                except Exception:
+                    pass
+                raise json.JSONDecodeError("could not parse", s, 0)
+
+            data = parse_payload(cleaned_input)
             feedback_id = data.get("feedback_id")
             text = data.get("text")
             item_type = data.get("type")  # feedback | question | None
             if not item_type:
                 # Попробуем определить тип из кэша по id
                 item_type = _WB_ID_TO_TYPE_CACHE.get(feedback_id)
+            logging.info(
+                f"[WBTools] Подготовка ответа: id={feedback_id}, type={item_type}, text_len={(len(text) if isinstance(text, str) else 'n/a')}"
+            )
             
             if not feedback_id or not text:
                 return "Ошибка: в запросе должны быть 'feedback_id' и 'text'."
@@ -131,7 +162,7 @@ def post_feedback_answer_tool():
             result = post_feedback_answer(feedback_id, text, item_type=item_type)
             
             if result is None:
-                return f"Не удалось отправить ответ на отзыв {feedback_id}."
+                return f"Не удалось отправить ответ на отзыв/вопрос {feedback_id}. Проверяйте логи [WildberriesAPI]."
             
             return f"Ответ отправлен ({item_type or 'auto'}): {feedback_id}."
 

@@ -1,6 +1,7 @@
 # wildberries_api.py
 
 import os
+import json
 import requests
 import logging
 from dotenv import load_dotenv
@@ -16,7 +17,8 @@ if not WB_API_KEY:
 BASE_URL = "https://feedbacks-api.wildberries.ru/api/v1"
 # ИСПРАВЛЕНО: Добавлен префикс "Bearer " к токену
 HEADERS = {
-    'Authorization': f'Bearer {WB_API_KEY}'
+    'Authorization': f'Bearer {WB_API_KEY}',
+    'Content-Type': 'application/json'
 }
 
 def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[list]:
@@ -96,6 +98,9 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
     }
     def _post(url_suffix: str, log_label: str):
         try:
+            logging.info(
+                f"[WildberriesAPI] Подготовка запроса: url={BASE_URL}/{url_suffix}, id={feedback_id}, text_len={len(text)}"
+            )
             response = requests.post(f"{BASE_URL}/{url_suffix}", headers=HEADERS, json=body)
             response.raise_for_status()
             logging.info(f"[WildberriesAPI] Отправка ответа на {log_label} {feedback_id}: {response.status_code}")
