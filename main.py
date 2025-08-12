@@ -237,6 +237,7 @@ async def background_wb_chat_responder():
 
     last_event_id = None
     next_token = None
+    reply_sign_cache = {}
     get_events_tool = get_chat_events_tool()
     send_tool = post_chat_message_tool()
 
@@ -296,6 +297,10 @@ async def background_wb_chat_responder():
                 reply_sign = payload_message.get("replySign")
                 sender = (ev.get("sender") or payload_message.get("sender") or "").lower()
 
+                # Кэшируем replySign на чат, если пришёл
+                if chat_id and reply_sign:
+                    reply_sign_cache[str(chat_id)] = reply_sign
+
                 # Отвечаем только на сообщения клиента
                 if sender and sender != "client":
                     if WB_CHAT_DEBUG:
@@ -319,12 +324,19 @@ async def background_wb_chat_responder():
                         reply = reply.strip().replace("```", "")
                         if WB_CHAT_DEBUG:
                             logging.info(f"[BackgroundWBChat] Ответ (preview): {reply[:160]}…")
-                        send_tool.func(json.dumps({
+                        final_reply_sign = reply_sign or reply_sign_cache.get(str(chat_id))
+                        if not final_reply_sign and WB_CHAT_DEBUG:
+                            logging.info("[BackgroundWBChat] Нет replySign — пропускаю отправку для безопасности")
+                            continue
+                        send_result = send_tool.func(json.dumps({
                             "chat_id": str(chat_id),
                             "text": reply,
-                            "reply_sign": reply_sign
+                            "reply_sign": final_reply_sign
                         }))
-                        logging.info(f"[BackgroundWBChat] Ответ отправлен в чат {chat_id}")
+                        if isinstance(send_result, str) and send_result.startswith("Сообщение отправлено"):
+                            logging.info(f"[BackgroundWBChat] Ответ отправлен в чат {chat_id}")
+                        else:
+                            logging.warning(f"[BackgroundWBChat] Отправка могла не пройти: {send_result}")
                 except Exception as e:
                     logging.error(f"[BackgroundWBChat] Ошибка генерации/отправки ответа: {e}", exc_info=True)
 
