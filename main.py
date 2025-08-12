@@ -236,6 +236,7 @@ async def background_wb_chat_responder():
     agent_executor = get_or_create_agent(user_id=-1, is_background_agent=True)
 
     last_event_id = None
+    next_token = None
     get_events_tool = get_chat_events_tool()
     send_tool = post_chat_message_tool()
 
@@ -244,7 +245,9 @@ async def background_wb_chat_responder():
             if agent_executor.memory:
                 agent_executor.memory.clear()
             payload = {}
-            if last_event_id is not None:
+            if next_token is not None:
+                payload["next"] = next_token
+            elif last_event_id is not None:
                 payload["last_event_id"] = last_event_id
             events_json = get_events_tool.func(json.dumps(payload))
             if WB_CHAT_DEBUG:
@@ -261,27 +264,43 @@ async def background_wb_chat_responder():
                 continue
 
             # Ожидаем структуру вида {"data": {"events": [...]}}
-            data = events.get("data") if isinstance(events, dict) else None
-            event_list = (data or {}).get("events", []) if isinstance(data, dict) else []
+            # Структура по логу: {"result": {"next": <int>, "events": [...]}}
+            container = None
+            if isinstance(events, dict):
+                container = events.get("result") or events.get("data") or {}
+            next_token = container.get("next") if isinstance(container, dict) else None
+            event_list = (container or {}).get("events", []) if isinstance(container, dict) else []
 
             logging.info(f"[BackgroundWBChat] Получено событий: {len(event_list)}")
             for ev in event_list:
                 # Запоминаем максимальный id
-                ev_id = ev.get("id") or ev.get("eventId")
+                ev_id = ev.get("id") or ev.get("eventId") or ev.get("eventID")
                 if isinstance(ev_id, int):
                     last_event_id = max(last_event_id or 0, ev_id)
 
                 # Нас интересуют входящие сообщения от покупателя
                 # Тип события и структура зависят от WB, но обычно есть chatId и message/text
-                ev_type = ev.get("type") or ev.get("eventType")
+                ev_type = ev.get("type") or ev.get("eventType") or ev.get("event_type")
                 if str(ev_type).lower() not in ("message", "msg", "user_message", "buyer_message"):
                     if WB_CHAT_DEBUG:
                         logging.info(f"[BackgroundWBChat] Пропущено событие типа {ev_type}")
                     continue
 
                 payload_message = ev.get("message") or {}
-                chat_id = ev.get("chatId") or payload_message.get("chatId") or payload_message.get("chat_id")
+                chat_id = (
+                    ev.get("chatId") or ev.get("chatID") or
+                    payload_message.get("chatId") or payload_message.get("chatID") or
+                    payload_message.get("chat_id")
+                )
                 text = payload_message.get("text") or ev.get("text")
+                reply_sign = payload_message.get("replySign")
+                sender = (ev.get("sender") or payload_message.get("sender") or "").lower()
+
+                # Отвечаем только на сообщения клиента
+                if sender and sender != "client":
+                    if WB_CHAT_DEBUG:
+                        logging.info("[BackgroundWBChat] Пропуск: отправитель не клиент")
+                    continue
 
                 if not chat_id or not text:
                     if WB_CHAT_DEBUG:
@@ -300,7 +319,11 @@ async def background_wb_chat_responder():
                         reply = reply.strip().replace("```", "")
                         if WB_CHAT_DEBUG:
                             logging.info(f"[BackgroundWBChat] Ответ (preview): {reply[:160]}…")
-                        send_tool.func(json.dumps({"chat_id": str(chat_id), "text": reply}))
+                        send_tool.func(json.dumps({
+                            "chat_id": str(chat_id),
+                            "text": reply,
+                            "reply_sign": reply_sign
+                        }))
                         logging.info(f"[BackgroundWBChat] Ответ отправлен в чат {chat_id}")
                 except Exception as e:
                     logging.error(f"[BackgroundWBChat] Ошибка генерации/отправки ответа: {e}", exc_info=True)

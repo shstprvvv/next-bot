@@ -153,25 +153,22 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
 
 # --- ЧАТ С ПОКУПАТЕЛЕМ ---
 
-def get_chat_events(last_event_id: Optional[int] = None, limit: int = 100) -> Optional[Dict[str, Any]]:
-    """Получает события чатов продавца.
+def get_chat_events(last_event_id: Optional[int] = None, next_token: Optional[int] = None, limit: int = 100) -> Optional[Dict[str, Any]]:
+    """Получает события чатов продавца (инкрементально).
 
-    Документация: см. "Чат с покупателями / События чатов".
     Эндпоинт: GET /seller/events
-
-    Параметры:
-    - last_event_id: обработанный последний ID события (для инкрементальной выборки)
-    - limit: максимум событий за один запрос
+    Поддерживается параметр next (watermark) согласно ответу API.
     """
     if not WB_API_KEY:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
         return None
 
     params: Dict[str, Any] = {"limit": limit}
-    if last_event_id is not None:
-        # Параметр может называться lastEventId (в камеле) — подготовим оба варианта
+    if next_token is not None:
+        params["next"] = next_token
+    elif last_event_id is not None:
+        # Фолбэк на старую схему
         params["lastEventId"] = last_event_id
-        params["last_event_id"] = last_event_id
 
     try:
         url = f"{CHAT_BASE_URL}/seller/events"
@@ -243,7 +240,7 @@ def list_chats(limit: int = 50, offset: int = 0) -> Optional[Dict[str, Any]]:
         return None
 
 
-def post_chat_message(chat_id: str, text: str) -> Optional[Dict[str, Any]]:
+def post_chat_message(chat_id: str, text: str, reply_sign: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Отправляет сообщение в чат с покупателем.
 
     Эндпоинт: POST /seller/message
@@ -253,7 +250,11 @@ def post_chat_message(chat_id: str, text: str) -> Optional[Dict[str, Any]]:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
         return None
 
-    payload = {"chatId": chat_id, "text": text}
+    payload: Dict[str, Any] = {"chatId": chat_id, "text": text}
+    # На некоторых окружениях параметр может называться chatID
+    payload["chatID"] = chat_id
+    if reply_sign:
+        payload["replySign"] = reply_sign
     try:
         url = f"{CHAT_BASE_URL}/seller/message"
         logging.info(

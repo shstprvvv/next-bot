@@ -190,7 +190,7 @@ def post_feedback_answer_tool():
 def get_chat_events_tool():
     """Инструмент: получить события чатов (инкрементально).
 
-    Вход: JSON c опциональными ключами: {"last_event_id": int, "limit": int}
+    Вход: JSON c опциональными ключами: {"last_event_id": int, "next": int, "limit": int}
     Выход: JSON событий или сообщение об ошибке.
     """
     def run_tool(input_str: str) -> str:
@@ -202,9 +202,10 @@ def get_chat_events_tool():
                 except Exception:
                     pass
             last_event_id = data.get("last_event_id")
+            next_token = data.get("next")
             limit = data.get("limit", 100)
-            logging.info(f"[WBTools] GetChatEvents last_event_id={last_event_id} limit={limit}")
-            events = get_chat_events(last_event_id=last_event_id, limit=limit)
+            logging.info(f"[WBTools] GetChatEvents last_event_id={last_event_id} next={next_token} limit={limit}")
+            events = get_chat_events(last_event_id=last_event_id, next_token=next_token, limit=limit)
             if events is None:
                 return "Не удалось получить события чатов."
             try:
@@ -220,24 +221,25 @@ def get_chat_events_tool():
     return Tool(
         name="GetChatEvents",
         func=run_tool,
-        description="Получает события чатов продавца (инкрементально). На вход принимает JSON с полями last_event_id и limit."
+        description="Получает события чатов продавца (инкрементально). На вход принимает JSON с полями last_event_id, next и limit."
     )
 
 
 def post_chat_message_tool():
     """Инструмент: отправить сообщение в чат покупателю.
 
-    Вход: JSON {"chat_id": string, "text": string}
+    Вход: JSON {"chat_id": string, "text": string, "reply_sign": string}
     """
     def run_tool(input_str: str) -> str:
         try:
             data = json.loads(input_str)
             chat_id = data.get("chat_id")
             text = data.get("text")
+            reply_sign = data.get("reply_sign")
             if not chat_id or not text:
                 return "Ошибка: обязательны chat_id и text"
-            logging.info(f"[WBTools] PostChatMessage chat_id={chat_id} text_len={len(text)}")
-            result = post_chat_message(chat_id, text)
+            logging.info(f"[WBTools] PostChatMessage chat_id={chat_id} text_len={len(text)} reply_sign={bool(reply_sign)}")
+            result = post_chat_message(chat_id, text, reply_sign=reply_sign)
             if result is None:
                 return "Не удалось отправить сообщение в чат."
             logging.info("[WBTools] PostChatMessage ok")
@@ -249,5 +251,5 @@ def post_chat_message_tool():
     return Tool(
         name="PostChatMessage",
         func=run_tool,
-        description="Отправляет сообщение в чат покупателю. На вход JSON: chat_id, text."
+        description="Отправляет сообщение в чат покупателю. На вход JSON: chat_id, text, reply_sign (опционально)."
     )
