@@ -14,8 +14,10 @@ WB_API_KEY = os.getenv('WB_API_KEY')
 if not WB_API_KEY:
     logging.warning("[WildberriesAPI] Токен WB_API_KEY не найден в .env файле. Функции API Wildberries не будут работать.")
 
-# Базовый адрес API общения с покупателем (включает отзывы/вопросы и чат)
+# Отзывы/вопросы
 BASE_URL = "https://feedbacks-api.wildberries.ru/api/v1"
+# Чат с покупателем: отдельный хост
+CHAT_BASE_URL = "https://chat-api.wildberries.ru/api/v1"
 # ИСПРАВЛЕНО: Добавлен префикс "Bearer " к токену
 HEADERS = {
     'Authorization': f'Bearer {WB_API_KEY}',
@@ -154,7 +156,7 @@ def get_chat_events(last_event_id: Optional[int] = None, limit: int = 100) -> Op
         params["last_event_id"] = last_event_id
 
     try:
-        url = f"{BASE_URL}/seller/events"
+        url = f"{CHAT_BASE_URL}/seller/events"
         logging.info(f"[WildberriesAPI] Запрос событий чата: {url} params={params}")
         response = requests.get(url, headers=HEADERS, params=params)
         logging.info(f"[WildberriesAPI] События чата статус: {response.status_code}")
@@ -194,7 +196,7 @@ def list_chats(limit: int = 50, offset: int = 0) -> Optional[Dict[str, Any]]:
 
     params = {"limit": limit, "offset": offset}
     try:
-        url = f"{BASE_URL}/seller/chats"
+        url = f"{CHAT_BASE_URL}/seller/chats"
         logging.info(f"[WildberriesAPI] Запрос списка чатов: {url} params={params}")
         response = requests.get(url, headers=HEADERS, params=params)
         logging.info(f"[WildberriesAPI] Список чатов статус: {response.status_code}")
@@ -235,7 +237,7 @@ def post_chat_message(chat_id: str, text: str) -> Optional[Dict[str, Any]]:
 
     payload = {"chatId": chat_id, "text": text}
     try:
-        url = f"{BASE_URL}/seller/message"
+        url = f"{CHAT_BASE_URL}/seller/message"
         logging.info(
             f"[WildberriesAPI] Отправка сообщения в чат: chatId={chat_id}, text_preview={_preview(text, 120)}"
         )
