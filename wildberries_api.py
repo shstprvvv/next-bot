@@ -17,7 +17,7 @@ if not WB_API_KEY:
 # Отзывы/вопросы
 BASE_URL = "https://feedbacks-api.wildberries.ru/api/v1"
 # Чат с покупателем: отдельный хост
-CHAT_BASE_URL = "https://chat-api.wildberries.ru/api/v1"
+CHAT_BASE_URL = os.getenv("WB_CHAT_BASE_URL", "https://chat-api.wildberries.ru/api/v1")
 # ИСПРАВЛЕНО: Добавлен префикс "Bearer " к токену
 HEADERS = {
     'Authorization': f'Bearer {WB_API_KEY}',
