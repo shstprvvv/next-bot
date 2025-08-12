@@ -7,7 +7,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import TextLoader
 from langchain_openai import OpenAIEmbeddings
-from wildberries_api import get_unanswered_feedbacks, get_unanswered_questions, post_feedback_answer
+from wildberries_api import (
+    get_unanswered_feedbacks,
+    get_unanswered_questions,
+    post_feedback_answer,
+    get_chat_events,
+    list_chats,
+    post_chat_message,
+)
 
 def create_knowledge_base_tool(api_key: str, base_url: str = None):
     """Создает и возвращает RAG-инструмент."""
@@ -176,4 +183,71 @@ def post_feedback_answer_tool():
         name="PostFeedbackAnswer",
         func=run_tool,
         description="Используй этот инструмент, чтобы отправить ответ на конкретный вопрос или отзыв. На вход нужно подать JSON-строку с двумя ключами: 'feedback_id' (уникальный идентификатор отзыва/вопроса) и 'text' (текст твоего ответа)."
+    )
+
+# --- Инструменты для чатов WB ---
+
+def get_chat_events_tool():
+    """Инструмент: получить события чатов (инкрементально).
+
+    Вход: JSON c опциональными ключами: {"last_event_id": int, "limit": int}
+    Выход: JSON событий или сообщение об ошибке.
+    """
+    def run_tool(input_str: str) -> str:
+        try:
+            data = {}
+            if input_str and input_str.strip():
+                try:
+                    data = json.loads(input_str)
+                except Exception:
+                    pass
+            last_event_id = data.get("last_event_id")
+            limit = data.get("limit", 100)
+            logging.info(f"[WBTools] GetChatEvents last_event_id={last_event_id} limit={limit}")
+            events = get_chat_events(last_event_id=last_event_id, limit=limit)
+            if events is None:
+                return "Не удалось получить события чатов."
+            try:
+                result = json.dumps(events, ensure_ascii=False)
+            except Exception:
+                result = str(events)
+            logging.info(f"[WBTools] GetChatEvents ok, size={len(result)}")
+            return result
+        except Exception as e:
+            logging.error(f"[WBTools] Ошибка get_chat_events_tool: {e}")
+            return "Произошла ошибка при получении событий чатов."
+
+    return Tool(
+        name="GetChatEvents",
+        func=run_tool,
+        description="Получает события чатов продавца (инкрементально). На вход принимает JSON с полями last_event_id и limit."
+    )
+
+
+def post_chat_message_tool():
+    """Инструмент: отправить сообщение в чат покупателю.
+
+    Вход: JSON {"chat_id": string, "text": string}
+    """
+    def run_tool(input_str: str) -> str:
+        try:
+            data = json.loads(input_str)
+            chat_id = data.get("chat_id")
+            text = data.get("text")
+            if not chat_id or not text:
+                return "Ошибка: обязательны chat_id и text"
+            logging.info(f"[WBTools] PostChatMessage chat_id={chat_id} text_len={len(text)}")
+            result = post_chat_message(chat_id, text)
+            if result is None:
+                return "Не удалось отправить сообщение в чат."
+            logging.info("[WBTools] PostChatMessage ok")
+            return "Сообщение отправлено."
+        except Exception as e:
+            logging.error(f"[WBTools] Ошибка post_chat_message_tool: {e}")
+            return "Произошла ошибка при отправке сообщения."
+
+    return Tool(
+        name="PostChatMessage",
+        func=run_tool,
+        description="Отправляет сообщение в чат покупателю. На вход JSON: chat_id, text."
     )

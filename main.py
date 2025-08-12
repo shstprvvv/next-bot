@@ -9,7 +9,13 @@ from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
-from tools import create_knowledge_base_tool, get_unanswered_feedbacks_tool, post_feedback_answer_tool
+from tools import (
+    create_knowledge_base_tool,
+    get_unanswered_feedbacks_tool,
+    post_feedback_answer_tool,
+    get_chat_events_tool,
+    post_chat_message_tool,
+)
 import json
 
 # --- Настройка логирования (ВАЖНО: должна быть в самом начале) ---
@@ -29,6 +35,8 @@ WB_API_KEY = os.getenv('WB_API_KEY')
 TELEGRAM_PASSWORD = os.getenv('TELEGRAM_PASSWORD')
 MESSAGE_DELAY_SECONDS = 30
 WB_CHECK_INTERVAL_SECONDS = 300
+WB_CHAT_POLL_INTERVAL_SECONDS = 20
+WB_CHAT_DEBUG = os.getenv('WB_CHAT_DEBUG', '0') == '1'
 logging.info("[Main] Конфигурация загружена.")
 
 # --- Инициализация клиентов и моделей ---
@@ -50,7 +58,12 @@ if knowledge_base_tool is None:
 wb_tools = []
 if WB_API_KEY:
     # ИСПРАВЛЕНО: Убрана передача STARTUP_TIME, чтобы отвечать на все отзывы
-    wb_tools.extend([get_unanswered_feedbacks_tool(), post_feedback_answer_tool()])
+    wb_tools.extend([
+        get_unanswered_feedbacks_tool(),
+        post_feedback_answer_tool(),
+        get_chat_events_tool(),
+        post_chat_message_tool(),
+    ])
     logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
 else:
     logging.warning("[Main] Ключ WB_API_KEY не найден. Функционал Wildberries будет отключен.")
@@ -141,7 +154,7 @@ def get_or_create_agent(user_id: int, is_background_agent=False):
         agent_store[user_id] = agent_executor
     return agent_store[user_id]
 
-# --- Фоновая задача для проверки WB ---
+# --- Фоновая задача для проверки WB (отзывы/вопросы) ---
 async def background_wb_checker():
     """Периодически проверяет и отвечает на отзывы Wildberries."""
     if not WB_API_KEY:
@@ -212,6 +225,91 @@ async def background_wb_checker():
         logging.info(f"[BackgroundWB] Следующая проверка через {WB_CHECK_INTERVAL_SECONDS} секунд.")
         await asyncio.sleep(WB_CHECK_INTERVAL_SECONDS)
 
+
+# --- Фоновая задача для чатов WB ---
+async def background_wb_chat_responder():
+    """Периодически опрашивает события чатов и автоматически отвечает."""
+    if not WB_API_KEY:
+        return
+
+    logging.info("[BackgroundWBChat] Запуск фоновой задачи для чатов WB...")
+    agent_executor = get_or_create_agent(user_id=-1, is_background_agent=True)
+
+    last_event_id = None
+    get_events_tool = get_chat_events_tool()
+    send_tool = post_chat_message_tool()
+
+    while True:
+        try:
+            if agent_executor.memory:
+                agent_executor.memory.clear()
+            payload = {}
+            if last_event_id is not None:
+                payload["last_event_id"] = last_event_id
+            events_json = get_events_tool.func(json.dumps(payload))
+            if WB_CHAT_DEBUG:
+                logging.info(f"[BackgroundWBChat] Raw events response: {events_json}")
+            try:
+                events = json.loads(events_json) if isinstance(events_json, str) else events_json
+            except Exception:
+                events = None
+
+            if not events or not isinstance(events, dict):
+                if WB_CHAT_DEBUG:
+                    logging.info("[BackgroundWBChat] Нет событий или неожиданный формат ответа")
+                await asyncio.sleep(WB_CHAT_POLL_INTERVAL_SECONDS)
+                continue
+
+            # Ожидаем структуру вида {"data": {"events": [...]}}
+            data = events.get("data") if isinstance(events, dict) else None
+            event_list = (data or {}).get("events", []) if isinstance(data, dict) else []
+
+            logging.info(f"[BackgroundWBChat] Получено событий: {len(event_list)}")
+            for ev in event_list:
+                # Запоминаем максимальный id
+                ev_id = ev.get("id") or ev.get("eventId")
+                if isinstance(ev_id, int):
+                    last_event_id = max(last_event_id or 0, ev_id)
+
+                # Нас интересуют входящие сообщения от покупателя
+                # Тип события и структура зависят от WB, но обычно есть chatId и message/text
+                ev_type = ev.get("type") or ev.get("eventType")
+                if str(ev_type).lower() not in ("message", "msg", "user_message", "buyer_message"):
+                    if WB_CHAT_DEBUG:
+                        logging.info(f"[BackgroundWBChat] Пропущено событие типа {ev_type}")
+                    continue
+
+                payload_message = ev.get("message") or {}
+                chat_id = ev.get("chatId") or payload_message.get("chatId") or payload_message.get("chat_id")
+                text = payload_message.get("text") or ev.get("text")
+
+                if not chat_id or not text:
+                    if WB_CHAT_DEBUG:
+                        logging.info("[BackgroundWBChat] Нет chat_id или текста в событии")
+                    continue
+
+                # Сформировать подсказку агенту для генерации ответа
+                input_prompt = (
+                    f"Сгенерируй вежливый ответ на сообщение покупателя в WB чате.\n"
+                    f"Сообщение: {text}"
+                )
+                try:
+                    response = await agent_executor.ainvoke({"input": input_prompt})
+                    reply = (response or {}).get("output", "")
+                    if reply:
+                        reply = reply.strip().replace("```", "")
+                        if WB_CHAT_DEBUG:
+                            logging.info(f"[BackgroundWBChat] Ответ (preview): {reply[:160]}…")
+                        send_tool.func(json.dumps({"chat_id": str(chat_id), "text": reply}))
+                        logging.info(f"[BackgroundWBChat] Ответ отправлен в чат {chat_id}")
+                except Exception as e:
+                    logging.error(f"[BackgroundWBChat] Ошибка генерации/отправки ответа: {e}", exc_info=True)
+
+        except Exception as e:
+            logging.error(f"[BackgroundWBChat] Ошибка в воркере: {e}", exc_info=True)
+
+        await asyncio.sleep(WB_CHAT_POLL_INTERVAL_SECONDS)
+
 # --- Управление отложенными задачами и сообщениями ---
 user_tasks = {}
 user_messages = defaultdict(list)
@@ -270,6 +368,7 @@ async def main():
     # Запускаем фоновую задачу для WB, если есть ключ
     if WB_API_KEY:
         asyncio.create_task(background_wb_checker())
+        asyncio.create_task(background_wb_chat_responder())
     
     # Запускаем клиент Telegram
     await client.start(
