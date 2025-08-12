@@ -16,13 +16,31 @@ if not WB_API_KEY:
 
 # Отзывы/вопросы
 BASE_URL = "https://feedbacks-api.wildberries.ru/api/v1"
-# Чат с покупателем: отдельный хост
-CHAT_BASE_URL = os.getenv("WB_CHAT_BASE_URL", "https://chat-api.wildberries.ru/api/v1")
-# ИСПРАВЛЕНО: Добавлен префикс "Bearer " к токену
-HEADERS = {
-    'Authorization': f'Bearer {WB_API_KEY}',
-    'Content-Type': 'application/json'
-}
+# Чат с покупателем: отдельный хост (можно переопределить)
+# Рекомендуемый base по результатам проверки: buyer-chat-api.wildberries.ru
+CHAT_BASE_URL = os.getenv("WB_CHAT_BASE_URL", "https://buyer-chat-api.wildberries.ru/api/v1")
+
+# Схема авторизации для чатов: Bearer | Raw
+# Bearer => Authorization: Bearer <token>
+# Raw    => Authorization: <token>
+WB_CHAT_AUTH_SCHEME = os.getenv("WB_CHAT_AUTH_SCHEME", "Bearer").strip()
+def _headers_feedbacks() -> Dict[str, str]:
+    return {
+        'Authorization': f'Bearer {WB_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+def _headers_chat() -> Dict[str, str]:
+    if WB_CHAT_AUTH_SCHEME.lower() == 'raw':
+        return {
+            'Authorization': f'{WB_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+    # default: Bearer
+    return {
+        'Authorization': f'Bearer {WB_API_KEY}',
+        'Content-Type': 'application/json'
+    }
 
 
 def _preview(value: Any, max_len: int = 300) -> str:
@@ -53,7 +71,7 @@ def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[li
         params['dateFrom'] = int(date_from.timestamp())
         
     try:
-        response = requests.get(f"{BASE_URL}/feedbacks", headers=HEADERS, params=params)
+        response = requests.get(f"{BASE_URL}/feedbacks", headers=_headers_feedbacks(), params=params)
         response.raise_for_status()
         logging.info(f"[WildberriesAPI] Запрос неотвеченных отзывов: {response.status_code}")
         data = response.json()
@@ -84,7 +102,7 @@ def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[li
         params['dateFrom'] = int(date_from.timestamp())
 
     try:
-        response = requests.get(f"{BASE_URL}/questions", headers=HEADERS, params=params)
+        response = requests.get(f"{BASE_URL}/questions", headers=_headers_feedbacks(), params=params)
         response.raise_for_status()
         logging.info(f"[WildberriesAPI] Запрос неотвеченных вопросов: {response.status_code}")
         data = response.json()
@@ -114,7 +132,7 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
             logging.info(
                 f"[WildberriesAPI] Подготовка запроса: url={BASE_URL}/{url_suffix}, id={feedback_id}, text_len={len(text)}"
             )
-            response = requests.post(f"{BASE_URL}/{url_suffix}", headers=HEADERS, json=body)
+            response = requests.post(f"{BASE_URL}/{url_suffix}", headers=_headers_feedbacks(), json=body)
             response.raise_for_status()
             logging.info(f"[WildberriesAPI] Отправка ответа на {log_label} {feedback_id}: {response.status_code}")
             if response.status_code == 204:
@@ -158,7 +176,7 @@ def get_chat_events(last_event_id: Optional[int] = None, limit: int = 100) -> Op
     try:
         url = f"{CHAT_BASE_URL}/seller/events"
         logging.info(f"[WildberriesAPI] Запрос событий чата: {url} params={params}")
-        response = requests.get(url, headers=HEADERS, params=params)
+        response = requests.get(url, headers=_headers_chat(), params=params)
         logging.info(f"[WildberriesAPI] События чата статус: {response.status_code}")
         response.raise_for_status()
         try:
@@ -198,7 +216,7 @@ def list_chats(limit: int = 50, offset: int = 0) -> Optional[Dict[str, Any]]:
     try:
         url = f"{CHAT_BASE_URL}/seller/chats"
         logging.info(f"[WildberriesAPI] Запрос списка чатов: {url} params={params}")
-        response = requests.get(url, headers=HEADERS, params=params)
+        response = requests.get(url, headers=_headers_chat(), params=params)
         logging.info(f"[WildberriesAPI] Список чатов статус: {response.status_code}")
         response.raise_for_status()
         try:
@@ -241,7 +259,7 @@ def post_chat_message(chat_id: str, text: str) -> Optional[Dict[str, Any]]:
         logging.info(
             f"[WildberriesAPI] Отправка сообщения в чат: chatId={chat_id}, text_preview={_preview(text, 120)}"
         )
-        response = requests.post(url, headers=HEADERS, json=payload)
+        response = requests.post(url, headers=_headers_chat(), json=payload)
         logging.info(f"[WildberriesAPI] Ответ на отправку сообщения: {response.status_code}")
         response.raise_for_status()
         if response.status_code in (200, 201, 204):
