@@ -117,8 +117,5 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
             logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
             return None
 
-    # Используем разные эндпоинты для отзывов и вопросов
-    if item_type == "question":
-        return _post("questions/answer", "вопрос")
-    # По умолчанию считаем feedback
-    return _post("feedbacks/answer", "отзыв")
+    # Всегда используем единый эндпоинт для публикации ответа (поддерживает вопросы и отзывы)
+    return _post("feedbacks/answer", "элемент")
