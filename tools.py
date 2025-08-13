@@ -16,7 +16,6 @@ from wildberries_api import (
     post_chat_message,
 )
 
-KB_READY = False
 
 def create_knowledge_base_tool(api_key: str, base_url: str = None):
     """Создает и возвращает RAG-инструмент. При сбое инициализации возвращает безопасный fallback."""
@@ -40,8 +39,6 @@ def create_knowledge_base_tool(api_key: str, base_url: str = None):
         
         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         logging.info("[KnowledgeBase] RAG-система успешно инициализирована.")
-        global KB_READY
-        KB_READY = True
 
     except FileNotFoundError:
         logging.error("[KnowledgeBase] КРИТИЧЕСКАЯ ОШИБКА: Файл knowledge_base.txt не найден. Переходим в fallback-режим.")
@@ -65,8 +62,7 @@ def create_knowledge_base_tool(api_key: str, base_url: str = None):
             logging.error(f"[KnowledgeBase] Ошибка при поиске: {e}")
             return ""
 
-def is_knowledge_base_ready() -> bool:
-    return KB_READY
+ # Убрали KB_READY; fallback уже реализован через пустой контекст
 
     return Tool(
         name="KnowledgeBaseSearch",

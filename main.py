@@ -16,7 +16,6 @@ from tools import (
     post_feedback_answer_tool,
     get_chat_events_tool,
     post_chat_message_tool,
-    is_knowledge_base_ready,
 )
 import json
 
@@ -39,7 +38,6 @@ MESSAGE_DELAY_SECONDS = 30
 WB_CHECK_INTERVAL_SECONDS = 300
 WB_CHAT_POLL_INTERVAL_SECONDS = 20
 WB_CHAT_DEBUG = os.getenv('WB_CHAT_DEBUG', '0') == '1'
-DISABLE_SENDING_IF_KB_UNAVAILABLE = os.getenv('DISABLE_SENDING_IF_KB_UNAVAILABLE', '1') == '1'
 logging.info("[Main] Конфигурация загружена.")
 
 # --- Инициализация клиентов и моделей ---
@@ -210,12 +208,6 @@ async def background_wb_checker():
                     item_id = item_to_answer.get("id")
                     logging.info(f"[BackgroundWB] Найден новый элемент для ответа. ID: {item_id}")
                     
-                    # Если база знаний недоступна и политика запрещает отправку — пропускаем
-                    if DISABLE_SENDING_IF_KB_UNAVAILABLE and not is_knowledge_base_ready():
-                        logging.warning(f"[BackgroundWB] KB недоступна. Пропускаю отправку ответа для {item_id}.")
-                        recently_answered_ids.append(item_id)
-                        continue
-
                     # Формируем конкретный запрос для агента, чтобы он ответил на этот элемент
                     input_prompt = (
                         f"Ответь на следующий отзыв/вопрос с ID {item_id}. "
@@ -376,11 +368,6 @@ async def process_user_messages(user_id, event):
 
     try:
         agent_executor = get_or_create_agent(user_id)
-        # Если KB недоступна и политика запрещает отправку — ответ не отправляем
-        if DISABLE_SENDING_IF_KB_UNAVAILABLE and not is_knowledge_base_ready():
-            logging.warning("[Telegram] KB недоступна. Ответ не отправляется по политике DISABLE_SENDING_IF_KB_UNAVAILABLE.")
-            await event.reply("Извините, сейчас сервис временно недоступен. Пожалуйста, попробуйте позже.")
-            return
         response = await agent_executor.ainvoke({"input": full_message})
         reply = response.get("output", "Извините, я не смог обработать ваш запрос.")
         
