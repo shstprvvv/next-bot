@@ -9,6 +9,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
+from langchain.tools import Tool
 from tools import (
     create_knowledge_base_tool,
     get_unanswered_feedbacks_tool,
@@ -54,8 +55,14 @@ logging.info("[Main] Клиенты LLM и Telegram инициализирова
 # --- Создание инструментов ---
 knowledge_base_tool = create_knowledge_base_tool(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
 if knowledge_base_tool is None:
-    logging.error("[Main] Не удалось создать инструмент базы знаний. Приложение не может продолжить работу.")
-    exit()
+    logging.error("[Main] Не удалось создать инструмент базы знаний. Включаю fallback и продолжаю работу.")
+    def _kb_fallback(query: str) -> str:
+        return ""
+    knowledge_base_tool = Tool(
+        name="KnowledgeBaseSearch",
+        func=_kb_fallback,
+        description="Fallback: возвращает пустой контекст, если база знаний недоступна"
+    )
 
 wb_tools = []
 if WB_API_KEY:
