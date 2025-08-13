@@ -16,10 +16,12 @@ from wildberries_api import (
     post_chat_message,
 )
 
+KB_READY = False
+
 def create_knowledge_base_tool(api_key: str, base_url: str = None):
-    """Создает и возвращает RAG-инструмент."""
+    """Создает и возвращает RAG-инструмент. При сбое инициализации возвращает безопасный fallback."""
     logging.info("[KnowledgeBase] Инициализация RAG-системы...")
-    
+    retriever = None
     try:
         logging.info("[KnowledgeBase] Шаг 1: Загрузка knowledge_base.txt...")
         loader = TextLoader('knowledge_base.txt', encoding='utf-8')
@@ -38,24 +40,33 @@ def create_knowledge_base_tool(api_key: str, base_url: str = None):
         
         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         logging.info("[KnowledgeBase] RAG-система успешно инициализирована.")
+        global KB_READY
+        KB_READY = True
 
     except FileNotFoundError:
-        logging.error("[KnowledgeBase] КРИТИЧЕСКАЯ ОШИБКА: Файл knowledge_base.txt не найден.")
-        return None
+        logging.error("[KnowledgeBase] КРИТИЧЕСКАЯ ОШИБКА: Файл knowledge_base.txt не найден. Переходим в fallback-режим.")
+        retriever = None
     except Exception as e:
-        logging.error(f"[KnowledgeBase] КРИТИЧЕСКАЯ ОШИБКА при инициализации: {e}", exc_info=True)
-        return None
+        logging.error(f"[KnowledgeBase] КРИТИЧЕСКАЯ ОШИБКА при инициализации: {e}")
+        logging.error("[KnowledgeBase] Включен fallback: поиск будет возвращать пустой контекст, приложение продолжит работу.")
+        retriever = None
 
     def search_knowledge_base(query: str) -> str:
-        """Ищет релевантную информацию в базе знаний по запросу пользователя."""
+        """Ищет релевантную информацию. В fallback-режиме возвращает пустой контекст."""
         try:
+            if retriever is None:
+                logging.warning("[KnowledgeBase] Fallback-режим: возвращаю пустой контекст для запроса.")
+                return ""
             relevant_docs = retriever.invoke(query)
             context = "\n\n".join([doc.page_content for doc in relevant_docs])
             logging.info(f"[KnowledgeBase] Найдена информация для запроса: '{query}'")
             return context
         except Exception as e:
-            logging.error(f"[KnowledgeBase] Ошибка при поиске: {e}", exc_info=True)
-            return "Произошла ошибка при поиске в базе знаний."
+            logging.error(f"[KnowledgeBase] Ошибка при поиске: {e}")
+            return ""
+
+def is_knowledge_base_ready() -> bool:
+    return KB_READY
 
     return Tool(
         name="KnowledgeBaseSearch",
