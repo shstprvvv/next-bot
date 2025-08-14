@@ -93,6 +93,8 @@ Observation: Результат от инструмента.
 Thought: Теперь я знаю финальный ответ.
 Final Answer: Финальный ответ для пользователя.
 
+Важно: если базовые шаги (замена батареек в пульте, перезагрузка приставки, проверка кабелей/интернета) не помогли, предложи оформить возврат товара через маркетплейс, где была покупка (Wildberries или Ozon). Никогда не направляй пользователя в сервисный центр и не упоминай сервисные центры.
+
 Начинай!
 
 История переписки:
@@ -112,6 +114,8 @@ wb_agent_prompt_template = """Ты — ассистент, который отв
 1. Используй инструмент `KnowledgeBaseSearch` с текстом из JSON, чтобы найти информацию для ответа.
 2. Сгенерируй вежливый и полезный ответ. Используй эмодзи.
 3. Используй инструмент `PostFeedbackAnswer`, чтобы отправить сгенерированный ответ.
+
+Важно: при описании неисправности после кратких базовых шагов предложи оформить возврат через маркетплейс (быстрая замена/возврат). Никогда не направляй пользователя в сервисный центр и не упоминай сервисные центры.
 
 Начинай!
 
@@ -136,6 +140,39 @@ wb_agent_prompt = PromptTemplate.from_template(wb_agent_prompt_template)
 
 STARTUP_TIME = datetime.now()
 logging.info(f"[Main] Время запуска зафиксировано: {STARTUP_TIME.isoformat()}")
+
+# --- Перехват и нормализация ответа перед отправкой ---
+FRIENDLY_FALLBACK_MESSAGE = (
+    "Извините, сейчас не удалось сформировать ответ. Я уточняю детали и вернусь с решением. "
+    "Пока попробуйте: перезагрузить приставку и роутер, проверить интернет. При необходимости можно оформить возврат через маркетплейс."
+)
+
+BLOCK_PHRASES = [
+    "Agent stopped due to iteration limit or time limit",
+    "AgentExecutor stopped due to iteration limit",
+    "Could not parse LLM output",
+    "Tool input is malformed",
+    "Invalid or incomplete tool call",
+]
+
+def _sanitize_text(text: str) -> str:
+    if not isinstance(text, str):
+        return ""
+    cleaned = text.strip().replace("```", "").strip()
+    # Нормализуем пробелы
+    cleaned = " ".join(cleaned.split())
+    return cleaned
+
+def make_final_reply(raw_output: str) -> str:
+    cleaned = _sanitize_text(raw_output)
+    if not cleaned:
+        return FRIENDLY_FALLBACK_MESSAGE
+    low = cleaned.lower()
+    for phrase in BLOCK_PHRASES:
+        if phrase.lower() in low:
+            logging.info("[ReplyGuard] Перехвачен служебный ответ агента, заменяю на дружелюбный fallback.")
+            return FRIENDLY_FALLBACK_MESSAGE
+    return cleaned
 
 # --- Управление агентами и памятью ---
 agent_store = {}
@@ -369,12 +406,10 @@ async def process_user_messages(user_id, event):
     try:
         agent_executor = get_or_create_agent(user_id)
         response = await agent_executor.ainvoke({"input": full_message})
-        reply = response.get("output", "Извините, я не смог обработать ваш запрос.")
-        
-        reply = reply.strip().replace("```", "")
-        
-        await event.reply(reply)
-        logging.info(f"[Telegram] Отправлен ответ для {user_id}: '{reply}'")
+        raw_reply = response.get("output", "")
+        final_reply = make_final_reply(raw_reply)
+        await event.reply(final_reply)
+        logging.info(f"[Telegram] Отправлен ответ для {user_id}: '{final_reply}'")
     except Exception as e:
         logging.error(f"[Telegram] Ошибка при обработке сообщения для {user_id}: {e}", exc_info=True)
         await event.reply("Произошла ошибка. Пожалуйста, попробуйте позже.")
