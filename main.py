@@ -33,6 +33,7 @@ setup_logging()
 logging.info("[Main] Конфигурация загружена.")
 
 TELETHON_PHONE = cfg.get("TELETHON_PHONE")
+TELEGRAM_PASSWORD = cfg.get("TELEGRAM_PASSWORD")
 WB_CHECK_INTERVAL_SECONDS = cfg["WB_CHECK_INTERVAL_SECONDS"]
 WB_CHAT_POLLING_INTERVAL_SECONDS = cfg["WB_CHAT_POLLING_INTERVAL_SECONDS"]
 WB_CHAT_DEBUG = cfg["WB_CHAT_DEBUG"]
@@ -184,8 +185,8 @@ async def main():
     
     # Запускаем клиент Telegram
     await client.start(
-        phone=lambda: os.getenv('TELETHON_PHONE'),
-        password=lambda: os.getenv('TELEGRAM_PASSWORD')
+        phone=TELETHON_PHONE,
+        password=TELEGRAM_PASSWORD
     )
     print("[Main] Клиент Telegram запущен.")
     await client.run_until_disconnected()
