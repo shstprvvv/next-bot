@@ -1,0 +1,27 @@
+# Исключаем файлы и директории, которые не нужны в Docker-образе
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+*.venv/
+env/
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# Сессионные файлы Telethon
+*.session
+*.session-journal
+
+# Docker
+Dockerfile
+.dockerignore

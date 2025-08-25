@@ -1,4 +1,4 @@
-from wildberries_api import (
+from app.wb.api_impl import (
     get_unanswered_feedbacks,
     get_unanswered_questions,
     post_feedback_answer,

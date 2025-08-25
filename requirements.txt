@@ -3,6 +3,8 @@ python-dotenv
 langchain
 langchain-community
 langchain-openai
+langchain-experimental
+langchainhub
 openai
 faiss-cpu
 requests

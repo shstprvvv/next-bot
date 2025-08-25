@@ -1,11 +1,9 @@
-# wildberries_api.py
-
 import os
 import json
 import requests
 import logging
 from dotenv import load_dotenv
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 
 load_dotenv()
 
@@ -24,11 +22,14 @@ CHAT_BASE_URL = os.getenv("WB_CHAT_BASE_URL", "https://buyer-chat-api.wildberrie
 # Bearer => Authorization: Bearer <token>
 # Raw    => Authorization: <token>
 WB_CHAT_AUTH_SCHEME = os.getenv("WB_CHAT_AUTH_SCHEME", "Bearer").strip()
+
+
 def _headers_feedbacks() -> Dict[str, str]:
     return {
         'Authorization': f'Bearer {WB_API_KEY}',
         'Content-Type': 'application/json'
     }
+
 
 def _headers_chat() -> Dict[str, str]:
     if WB_CHAT_AUTH_SCHEME.lower() == 'raw':
@@ -52,6 +53,7 @@ def _preview(value: Any, max_len: int = 300) -> str:
         return s[:max_len] + "…"
     return s
 
+
 def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[list]:
     """
     Получает список неотвеченных отзывов и вопросов, начиная с определенной даты.
@@ -69,7 +71,7 @@ def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[li
     # Добавляем фильтр по дате, если он передан
     if date_from:
         params['dateFrom'] = int(date_from.timestamp())
-        
+
     try:
         response = requests.get(f"{BASE_URL}/feedbacks", headers=_headers_feedbacks(), params=params)
         response.raise_for_status()
@@ -85,6 +87,7 @@ def get_unanswered_feedbacks(max_items: int = 20, date_from=None) -> Optional[li
                 error_details = e.response.text
         logging.error(f"[WildberriesAPI] Ошибка при получении отзывов: {e}. Детали: {error_details}")
         return None
+
 
 def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[list]:
     """Получает список неотвеченных вопросов покупателей."""
@@ -117,6 +120,7 @@ def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[li
         logging.error(f"[WildberriesAPI] Ошибка при получении вопросов: {e}. Детали: {error_details}")
         return None
 
+
 def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Отправляет ответ на отзыв или вопрос (единый эндпоинт /feedbacks/answer)."""
     if not WB_API_KEY:
@@ -127,6 +131,7 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
         "id": feedback_id,
         "text": text
     }
+
     def _post(url_suffix: str, log_label: str):
         try:
             logging.info(
@@ -151,7 +156,6 @@ def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] =
     # Всегда используем единый эндпоинт для публикации ответа (поддерживает вопросы и отзывы)
     return _post("feedbacks/answer", "элемент")
 
-# --- ЧАТ С ПОКУПАТЕЛЕМ ---
 
 def get_chat_events(last_event_id: Optional[int] = None, next_token: Optional[int] = None, limit: int = 100) -> Optional[Dict[str, Any]]:
     """Получает события чатов продавца (инкрементально).
@@ -240,21 +244,23 @@ def list_chats(limit: int = 50, offset: int = 0) -> Optional[Dict[str, Any]]:
         return None
 
 
-def post_chat_message(chat_id: str, text: str, reply_sign: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def post_chat_message(chat_id: str, text: str, reply_sign: bool = False) -> Optional[Dict[str, Any]]:
     """Отправляет сообщение в чат с покупателем.
 
     Эндпоинт: POST /seller/message
-    Тело: { "chatId": string, "text": string }
+    Тело: { "chatId": string, "text": string, "replySign": boolean }
     """
     if not WB_API_KEY:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
         return None
 
-    payload: Dict[str, Any] = {"chatId": chat_id, "text": text}
+    payload: Dict[str, Any] = {
+        "chatId": chat_id,
+        "text": text,
+        "replySign": reply_sign
+    }
     # На некоторых окружениях параметр может называться chatID
     payload["chatID"] = chat_id
-    if reply_sign:
-        payload["replySign"] = reply_sign
     try:
         url = f"{CHAT_BASE_URL}/seller/message"
         logging.info(
@@ -280,3 +286,14 @@ def post_chat_message(chat_id: str, text: str, reply_sign: Optional[str] = None)
                 error_details = e.response.text
         logging.error(f"[WildberriesAPI] Ошибка при отправке сообщения в чат: {e}. Детали: {error_details}")
         return None
+
+__all__ = [
+    "get_unanswered_feedbacks",
+    "get_unanswered_questions",
+    "post_feedback_answer",
+    "get_chat_events",
+    "list_chats",
+    "post_chat_message",
+]
+
+
