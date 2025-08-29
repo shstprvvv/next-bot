@@ -3,6 +3,9 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()  # Загружаем переменные из .env файла
 
 from app.telegram.client import create_telegram_client
 from app.telegram.handlers import setup_telegram_handlers
@@ -11,12 +14,12 @@ from app.logging_config import setup_logging
 from langchain_openai import ChatOpenAI
 from langchain.tools import Tool
 from app.tools.knowledge_tool import create_knowledge_base_tool
+from app.tools.knowledge_tool import create_retriever
 # import aåpp.wb.tools
 # from app.wb.background import background_wb_checker, background_wb_chat_responder
 import json
 
-from app.agents.factory import create_agent_executor
-from app.agents.prompts import get_agent_prompt
+from app.chains.factory import create_conversational_chain
 
 # --- Загрузка конфигурации ---
 cfg = load_config()
@@ -63,38 +66,22 @@ llm = ChatOpenAI(
 )
 logging.info("[Main] Клиенты LLM и Telegram инициализированы.")
 
-# --- Создание инструментов ---
-logging.info("[Main] Создание инструментов...")
-knowledge_base_tool = create_knowledge_base_tool(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
-if knowledge_base_tool is None:
-    logging.error("[Main] Не удалось создать инструмент базы знаний. Включаю fallback и продолжаю работу.")
-    def _kb_fallback(query: str) -> str:
-        return ""
-    knowledge_base_tool = Tool(
-        name="KnowledgeBaseSearch",
-        func=_kb_fallback,
-        description="Fallback: возвращает пустой контекст, если база знаний недоступна"
-    )
+# --- Создание retriever ---
+logging.info("[Main] Создание retriever для базы знаний...")
+retriever = create_retriever(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+if retriever is None:
+    logging.critical("[Main] Не удалось создать retriever. Работа приложения невозможна.")
+    # В реальном приложении здесь может быть более graceful shutdown
+    exit("Retriever initialization failed.")
 
 # --- Функционал WB отключен для экономии средств ---
-wb_tools = []
-logging.info("[Main] Функционал Wildberries отключен для экономии средств.")
-# if WB_API_KEY:
-#     wb_tools.extend([
-#         get_unanswered_feedbacks_tool(),
-#         post_feedback_answer_tool(),
-#         get_chat_events_tool(),
-#         post_chat_message_tool(),
-#     ])
-#     logging.info("[Main] Инструменты для Wildberries успешно инициализированы.")
-# else:
-#     logging.warning("[Main] Ключ WB_API_KEY не найден. Функционал Wildberries будет отключен.")
+# wb_tools = [] # Логика WB остается для будущего
+# logging.info("[Main] Функционал Wildberries отключен для экономии средств.")
 
-all_tools = [knowledge_base_tool] + wb_tools
 
 # --- Системные промпты для агента ---
-agent_prompt = get_agent_prompt()
-# wb_agent_prompt = get_wb_agent_prompt() # Отключено
+# Больше не нужны, так как промпт теперь внутри Chain
+# agent_prompt = get_agent_prompt()
 
 
 STARTUP_TIME = datetime.now()
@@ -102,8 +89,7 @@ logging.info(f"[Main] Время запуска зафиксировано: {STA
 
 # --- Перехват и нормализация ответа перед отправкой ---
 FRIENDLY_FALLBACK_MESSAGE = (
-    "Извините, сейчас не удалось сформировать ответ. Я уточняю детали и вернусь с решением. "
-    "Пока попробуйте: перезагрузить приставку и роутер, проверить интернет. При необходимости можно оформить возврат через маркетплейс."
+    "К сожалению, у меня нет готового решения для вашего вопроса. Мы изучим проблему более детально и вернемся с ответом чуть позже. Приносим извинения за неудобства."
 )
 
 BLOCK_PHRASES = [
@@ -112,14 +98,17 @@ BLOCK_PHRASES = [
     "Could not parse LLM output",
     "Tool input is malformed",
     "Invalid or incomplete tool call",
+    # Добавим фразы, которые может вернуть chain при отсутствии ответа
+    "не знаю ответа",
+    "не могу ответить",
 ]
 
 def _sanitize_text(text: str) -> str:
     if not isinstance(text, str):
         return ""
-    cleaned = text.strip().replace("```", "").strip()
-    # Нормализуем пробелы
-    cleaned = " ".join(cleaned.split())
+    # Убираем стандартные символы разметки и лишние пробелы по краям.
+    # Важно: не используем " ".join(cleaned.split()), чтобы сохранить переносы строк.
+    cleaned = text.strip().replace("```", "").replace("###", "").replace("---", "").strip()
     return cleaned
 
 def make_final_reply(raw_output: str) -> str:
@@ -129,19 +118,19 @@ def make_final_reply(raw_output: str) -> str:
     low = cleaned.lower()
     for phrase in BLOCK_PHRASES:
         if phrase.lower() in low:
-            logging.info("[ReplyGuard] Перехвачен служебный ответ агента, заменяю на дружелюбный fallback.")
+            logging.info("[ReplyGuard] Перехвачен служебный или пустой ответ, заменяю на дружелюбный fallback.")
             return FRIENDLY_FALLBACK_MESSAGE
     return cleaned
 
-# --- Управление агентами и памятью ---
-agent_store = {}
+# --- Управление цепочками и памятью ---
+chain_store = {}
 
-def get_or_create_agent(user_id: int, is_background_agent=False):
-    if user_id not in agent_store:
-        agent_type = 'фоновых задач' if is_background_agent else f'пользователя {user_id}'
-        logging.info(f"[Agent] Создание нового агента для {agent_type}")
-        agent_store[user_id] = create_agent_executor(llm, all_tools, is_background_agent=is_background_agent)
-    return agent_store[user_id]
+def get_or_create_chain(user_id: int):
+    if user_id not in chain_store:
+        logging.info(f"[Chain] Создание новой цепочки для пользователя {user_id}")
+        chain_store[user_id] = create_conversational_chain(llm, retriever)
+    return chain_store[user_id]
+
 
 # --- Фоновая задача для проверки WB (отзывы/вопросы) ---
 async def start_background_workers():
@@ -171,7 +160,7 @@ async def start_background_workers():
 setup_telegram_handlers(
     client=client,
     message_delay_seconds=TELEGRAM_MESSAGE_DELAY_SECONDS,
-    get_or_create_agent=get_or_create_agent,
+    get_or_create_chain=get_or_create_chain,
     normalize_reply=make_final_reply,
 )
 

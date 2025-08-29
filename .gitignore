@@ -27,6 +27,7 @@ dist/
 
 # Telethon session files
 *.session
+*.session-journal
 
 # Logs
 *.log

@@ -4,12 +4,12 @@ from collections import defaultdict
 from telethon import events
 
 
-def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_agent, normalize_reply=None):
+def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_chain, normalize_reply=None):
     """
     Регистрирует обработчики сообщений Telegram на переданном клиенте.
 
     - message_delay_seconds: задержка для объединения сообщений от одного пользователя
-    - get_or_create_agent: callable(user_id) -> AgentExecutor
+    - get_or_create_chain: callable(user_id) -> ConversationalRetrievalChain
     """
 
     user_tasks = {}
@@ -25,9 +25,9 @@ def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_ag
         logging.info(f"[Telegram] Обработка объединенного сообщения от {user_id}: '{full_message}'")
 
         try:
-            agent_executor = get_or_create_agent(user_id)
-            response = await agent_executor.ainvoke({"input": full_message})
-            raw_reply = response.get("output", "")
+            chain = get_or_create_chain(user_id)
+            response = await chain.ainvoke({"question": full_message})
+            raw_reply = response.get("answer", "")
             if callable(normalize_reply):
                 reply = normalize_reply(raw_reply)
             else:
