@@ -51,7 +51,7 @@ WB_CHAT_DEBUG = cfg["WB_CHAT_DEBUG"]
 
 # --- Инициализация LLM и Telegram клиента ---
 logging.info("[Main] Инициализация клиентов...")
-TELETHON_SESSION_NAME = os.getenv('TELETHON_SESSION_NAME', 'user_session')
+TELETHON_SESSION_NAME = os.getenv('TELETHON_SESSION_NAME', 'sessions/user_session')
 
 # Убедимся, что все необходимые переменные окружения загружены
 required_vars = {
