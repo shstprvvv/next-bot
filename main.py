@@ -3,9 +3,9 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime
-
-# Убираем load_dotenv, так как в Docker переменные передаются напрямую
 # from dotenv import load_dotenv
+
+# # Возвращаем load_dotenv для локального запуска
 # load_dotenv()
 
 from app.telegram.client import create_telegram_client
@@ -31,14 +31,12 @@ OPENAI_API_BASE = cfg.get("OPENAI_API_BASE")
 WB_API_KEY = cfg.get("WB_API_KEY")
 TELEGRAM_MESSAGE_DELAY_SECONDS = cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS")
 
+# Убираем отладочный вывод, он был нужен для Docker
 # --- ОТЛАДОЧНЫЙ ВЫВОД ---
-# Выведем ключевые переменные при старте, чтобы проверить их значения
-print("--- [DEBUG] Проверка переменных окружения ---")
-print(f"OPENAI_API_KEY: {'...' + OPENAI_API_KEY[-4:] if OPENAI_API_KEY else 'НЕ УСТАНОВЛЕН'}")
-print(f"OPENAI_API_BASE: {OPENAI_API_BASE or 'НЕ УСТАНОВЛЕН'}")
-print("---------------------------------------------")
-# --- Конец отладочного вывода ---
-
+# print("--- [DEBUG] Проверка переменных окружения ---")
+# print(f"OPENAI_API_KEY: {'...' + OPENAI_API_KEY[-4:] if OPENAI_API_KEY else 'НЕ УСТАНОВЛЕН'}")
+# print(f"OPENAI_API_BASE: {OPENAI_API_BASE or 'НЕ УСТАНОВЛЕН'}")
+# print("---------------------------------------------")
 
 # --- Настройка логирования ---
 setup_logging()

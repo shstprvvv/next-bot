@@ -3,7 +3,7 @@ import os
 from langchain.tools import Tool
 from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -13,7 +13,7 @@ def create_retriever(api_key: str, base_url: str = None):
     logging.info("[Retriever] Инициализация retriever из Markdown...")
     try:
         logging.info("[Retriever] Шаг 1: Загрузка knowledge_base.md...")
-        loader = UnstructuredMarkdownLoader('knowledge_base.md', mode="single")
+        loader = TextLoader('knowledge_base.md', encoding='utf-8')
         documents = loader.load()
         logging.info("[Retriever] Шаг 1: Файл успешно загружен.")
 
