@@ -29,7 +29,6 @@ TELETHON_API_HASH = cfg.get("TELETHON_API_HASH")
 OPENAI_API_KEY = cfg.get("OPENAI_API_KEY")
 OPENAI_API_BASE = cfg.get("OPENAI_API_BASE")
 WB_API_KEY = cfg.get("WB_API_KEY")
-TELEGRAM_BOT_TOKEN = cfg.get("TELEGRAM_BOT_TOKEN") # Добавляем токен бота
 TELEGRAM_MESSAGE_DELAY_SECONDS = cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS")
 
 # Убираем отладочный вывод, он был нужен для Docker
@@ -61,7 +60,6 @@ required_vars = {
     "OPENAI_API_KEY": OPENAI_API_KEY,
     "OPENAI_API_BASE": OPENAI_API_BASE,
     "WB_API_KEY": WB_API_KEY,
-    "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN, # Проверяем наличие токена
 }
 missing_vars = [key for key, value in required_vars.items() if not value]
 if missing_vars:
@@ -70,8 +68,7 @@ if missing_vars:
 client = create_telegram_client(
     TELETHON_SESSION_NAME, 
     TELETHON_API_ID, 
-    TELETHON_API_HASH,
-    TELEGRAM_BOT_TOKEN # Передаем токен
+    TELETHON_API_HASH
 )
 llm = ChatOpenAI(
     model="gpt-4o-mini",
@@ -179,10 +176,21 @@ setup_telegram_handlers(
 )
 
 # --- Запуск приложения ---
-if __name__ == "__main__":
+async def main():
+    """Основная функция для запуска бота и фоновых задач."""
     logging.info("[Main] Запуск Telegram-ассистента...")
-    # Для ботов правильный способ запуска - это client.start(bot_token=...)
-    # Telethon сам управляет циклом событий.
-    client.start(bot_token=TELEGRAM_BOT_TOKEN)
+    
+    # Запускаем фоновые задачи WB
+    await start_background_workers()
+    
+    # Запускаем клиент Telegram
+    await client.start(
+        phone=TELETHON_PHONE,
+        password=TELEGRAM_PASSWORD
+    )
     logging.info("[Main] Клиент Telegram запущен.")
-    client.run_until_disconnected()
+    await client.run_until_disconnected()
+
+if __name__ == "__main__":
+    with client:
+        client.loop.run_until_complete(main())
