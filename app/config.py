@@ -1,9 +1,9 @@
 import os
-from dotenv import load_dotenv
 
 
 def load_config():
-    load_dotenv()
+    # В Docker-окружении load_dotenv() не нужен, 
+    # переменные передаются напрямую через docker run --env-file
     return {
         "TELETHON_API_ID": os.getenv("TELETHON_API_ID"),
         "TELETHON_API_HASH": os.getenv("TELETHON_API_HASH"),

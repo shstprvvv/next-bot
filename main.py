@@ -3,9 +3,10 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime
-from dotenv import load_dotenv
 
-load_dotenv()  # Загружаем переменные из .env файла
+# Убираем load_dotenv, так как в Docker переменные передаются напрямую
+# from dotenv import load_dotenv
+# load_dotenv()
 
 from app.telegram.client import create_telegram_client
 from app.telegram.handlers import setup_telegram_handlers
@@ -29,6 +30,14 @@ OPENAI_API_KEY = cfg.get("OPENAI_API_KEY")
 OPENAI_API_BASE = cfg.get("OPENAI_API_BASE")
 WB_API_KEY = cfg.get("WB_API_KEY")
 TELEGRAM_MESSAGE_DELAY_SECONDS = cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS")
+
+# --- ОТЛАДОЧНЫЙ ВЫВОД ---
+# Выведем ключевые переменные при старте, чтобы проверить их значения
+print("--- [DEBUG] Проверка переменных окружения ---")
+print(f"OPENAI_API_KEY: {'...' + OPENAI_API_KEY[-4:] if OPENAI_API_KEY else 'НЕ УСТАНОВЛЕН'}")
+print(f"OPENAI_API_BASE: {OPENAI_API_BASE or 'НЕ УСТАНОВЛЕН'}")
+print("---------------------------------------------")
+# --- Конец отладочного вывода ---
 
 
 # --- Настройка логирования ---
