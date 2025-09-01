@@ -3,15 +3,14 @@ import logging
 from collections import defaultdict
 from telethon import events
 
+# Множество для хранения ID чатов, которые находятся под ручным управлением оператора
+OPERATOR_CONTROLLED_CHATS = set()
+
 
 def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_chain, normalize_reply=None):
     """
-    Регистрирует обработчики сообщений Telegram на переданном клиенте.
-
-    - message_delay_seconds: задержка для объединения сообщений от одного пользователя
-    - get_or_create_chain: callable(user_id) -> ConversationalRetrievalChain
+    Регистрирует универсальный обработчик сообщений Telegram.
     """
-
     user_tasks = {}
     user_messages = defaultdict(list)
 
@@ -41,29 +40,59 @@ def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_ch
         finally:
             user_tasks.pop(user_id, None)
 
-    @client.on(events.NewMessage(incoming=True, outgoing=False))
-    async def handler(event):
-        sender = await event.get_sender()
-        user_id = sender.id
-        message_text = event.raw_text
+    @client.on(events.NewMessage())
+    async def universal_handler(event):
+        # --- Блок управления для оператора (исходящие сообщения) ---
+        if event.out:
+            # Убедимся, что это личный чат с пользователем
+            if not event.is_private:
+                return
 
-        if user_id == 0:  # Игнорируем системного агента
+            chat_id = event.chat_id
+            command = event.raw_text.strip()
+
+            # Команда для перехвата управления
+            if command == '/takeover':
+                if chat_id not in OPERATOR_CONTROLLED_CHATS:
+                    OPERATOR_CONTROLLED_CHATS.add(chat_id)
+                    logging.info(f"[Operator] Управление чатом {chat_id} перехвачено.")
+                await event.delete()
+                return
+
+            # Команда для возврата управления боту
+            if command == '/bot':
+                if chat_id in OPERATOR_CONTROLLED_CHATS:
+                    OPERATOR_CONTROLLED_CHATS.remove(chat_id)
+                    logging.info(f"[Operator] Управление чатом {chat_id} возвращено боту.")
+                await event.delete()
+                return
+            
+            # Обычные исходящие сообщения оператора просто уходят, бот на них не реагирует
             return
 
-        logging.info(f"[Telegram] Получено сообщение от {user_id}: '{message_text}'. Добавлено в очередь.")
+        # --- Блок обработки входящих сообщений от пользователей ---
+        if event.is_private: # Реагируем только на сообщения в личных чатах
+            user_id = event.sender_id
 
-        user_messages[user_id].append(message_text)
+            # Проверяем, не находится ли чат на ручном управлении
+            if user_id in OPERATOR_CONTROLLED_CHATS:
+                logging.info(f"[Operator] Сообщение от {user_id} проигнорировано (ручное управление).")
+                return
 
-        if user_id in user_tasks:
-            user_tasks[user_id].cancel()
+            # --- Стандартная логика обработки сообщения ботом ---
+            message_text = event.raw_text
+            logging.info(f"[Telegram] Получено сообщение от {user_id}: '{message_text}'. Добавлено в очередь.")
 
-        task = asyncio.create_task(process_user_messages(user_id, event))
-        user_tasks[user_id] = task
+            user_messages[user_id].append(message_text)
 
-    # возвращаем ссылки (на случай тестов/очистки), но это опционально
+            if user_id in user_tasks:
+                user_tasks[user_id].cancel()
+
+            task = asyncio.create_task(process_user_messages(user_id, event))
+            user_tasks[user_id] = task
+
     return {
-        "process_user_messages": process_user_messages,
-        "handler": handler,
+        "universal_handler": universal_handler,
     }
 
 
