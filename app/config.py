@@ -8,6 +8,7 @@ def load_config():
         "TELETHON_API_ID": os.getenv("TELETHON_API_ID"),
         "TELETHON_API_HASH": os.getenv("TELETHON_API_HASH"),
         "TELETHON_PHONE": os.getenv("TELETHON_PHONE"),
+        "TELEGRAM_PASSWORD": os.getenv("TELEGRAM_PASSWORD"), # Добавляем загрузку пароля
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
         "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
         "WB_API_KEY": os.getenv("WB_API_KEY"),
