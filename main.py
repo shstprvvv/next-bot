@@ -203,5 +203,6 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    with client:
-        client.loop.run_until_complete(main())
+    # Убираем лишний `with client:`, который вызывает конфликт и падение
+    # Теперь клиент запускается только один раз внутри функции main()
+    client.loop.run_until_complete(main())
