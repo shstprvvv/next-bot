@@ -179,14 +179,22 @@ setup_telegram_handlers(
 async def main():
     """Основная функция для запуска бота и фоновых задач."""
     logging.info("[Main] Запуск Telegram-ассистента...")
-    
+
     # Запускаем фоновые задачи WB
     await start_background_workers()
-    
+
     # Запускаем клиент Telegram
+    # Получаем учетные данные прямо перед запуском
+    phone = cfg.get("TELETHON_PHONE")
+    password = cfg.get("TELEGRAM_PASSWORD")
+
+    if not phone:
+        logging.critical("[Main] TELETHON_PHONE не найден в конфигурации. Запуск невозможен.")
+        return
+
     await client.start(
-        phone=TELETHON_PHONE,
-        password=TELEGRAM_PASSWORD
+        phone=phone,
+        password=password
     )
     logging.info("[Main] Клиент Telegram запущен.")
     await client.run_until_disconnected()
