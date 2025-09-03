@@ -188,6 +188,9 @@ async def main():
     phone = cfg.get("TELETHON_PHONE")
     password = cfg.get("TELEGRAM_PASSWORD")
 
+    # --- ОТЛАДОЧНЫЙ ВЫВОД ---
+    logging.info(f"--- [DEBUG] Проверка TELETHON_PHONE перед запуском: '{phone}' ---")
+
     if not phone:
         logging.critical("[Main] TELETHON_PHONE не найден в конфигурации. Запуск невозможен.")
         return
