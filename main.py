@@ -175,19 +175,19 @@ setup_telegram_handlers(
 # --- Запуск приложения ---
 async def main():
     """Основная функция для запуска бота и фоновых задач."""
-    logging.info("[Main] Запуск в режиме тестирования WB...")
-
-    # Запускаем фоновые задачи WB
-    await start_background_workers()
-
-    logging.info("[Main] Фоновые задачи WB запущены.")
-    logging.info("[Main] Telegram-клиент отключен. Для остановки нажмите Ctrl+C.")
+    logging.info("[Main] Запуск Telegram-ассистента...")
     
-    # Бесконечно ждем, чтобы фоновые задачи могли работать
-    while True:
-        await asyncio.sleep(3600)
+    # Запускаем фоновые задачи WB параллельно
+    await start_background_workers()
+    
+    logging.info("[Main] Фоновые задачи WB запущены.")
+    logging.info("[Main] Telegram-клиент запущен. Для остановки нажмите Ctrl+C.")
+    
+    # Запускаем клиент Telegram и ждем его завершения
+    await client.run_until_disconnected()
 
 
 if __name__ == "__main__":
     # Для корректной работы в Windows/MacOS
+    client.start(phone=TELETHON_PHONE, password=TELEGRAM_PASSWORD)
     client.loop.run_until_complete(main())
