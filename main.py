@@ -3,10 +3,10 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 
-# # Возвращаем load_dotenv для локального запуска
-# load_dotenv()
+# Возвращаем load_dotenv для локального запуска
+load_dotenv()
 
 from app.telegram.client import create_telegram_client
 from app.telegram.handlers import setup_telegram_handlers
@@ -16,8 +16,8 @@ from langchain_openai import ChatOpenAI
 from langchain.tools import Tool
 from app.tools.knowledge_tool import create_knowledge_base_tool
 from app.tools.knowledge_tool import create_retriever
-# import aåpp.wb.tools
-# from app.wb.background import background_wb_checker, background_wb_chat_responder
+import app.wb.tools as wb_tools
+from app.wb.background import background_wb_checker, background_wb_chat_responder
 import json
 
 from app.chains.factory import create_conversational_chain
@@ -175,31 +175,19 @@ setup_telegram_handlers(
 # --- Запуск приложения ---
 async def main():
     """Основная функция для запуска бота и фоновых задач."""
-    logging.info("[Main] Запуск Telegram-ассистента...")
+    logging.info("[Main] Запуск в режиме тестирования WB...")
 
     # Запускаем фоновые задачи WB
     await start_background_workers()
 
-    # Запускаем клиент Telegram
-    # Получаем учетные данные прямо перед запуском
-    phone = cfg.get("TELETHON_PHONE")
-    password = cfg.get("TELEGRAM_PASSWORD")
+    logging.info("[Main] Фоновые задачи WB запущены.")
+    logging.info("[Main] Telegram-клиент отключен. Для остановки нажмите Ctrl+C.")
+    
+    # Бесконечно ждем, чтобы фоновые задачи могли работать
+    while True:
+        await asyncio.sleep(3600)
 
-    # --- ОТЛАДОЧНЫЙ ВЫВОД ---
-    logging.info(f"--- [DEBUG] Проверка TELETHON_PHONE перед запуском: '{phone}' ---")
-
-    if not phone:
-        logging.critical("[Main] TELETHON_PHONE не найден в конфигурации. Запуск невозможен.")
-        return
-
-    await client.start(
-        phone=phone,
-        password=password
-    )
-    logging.info("[Main] Клиент Telegram запущен.")
-    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    # Убираем лишний `with client:`, который вызывает конфликт и падение
-    # Теперь клиент запускается только один раз внутри функции main()
+    # Для корректной работы в Windows/MacOS
     client.loop.run_until_complete(main())
