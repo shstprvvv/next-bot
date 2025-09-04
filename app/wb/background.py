@@ -21,6 +21,9 @@ async def background_wb_checker(
     logging.info("[BackgroundWB] Запуск фоновой задачи для проверки отзывов Wildberries...")
     agent_executor = get_or_create_agent(user_id=0, is_background_agent=True)
 
+    unanswered_logger = logging.getLogger('unanswered')
+    fallback_phrase = "К сожалению, у меня нет готового решения"
+
     recently_answered_ids = deque(maxlen=100)
     unanswered_tool = get_unanswered_feedbacks_tool_factory()
     post_tool = post_answer_tool_factory()  # Создаем экземпляр инструмента для отправки
@@ -74,8 +77,10 @@ async def background_wb_checker(
                         response = await agent_executor.ainvoke({"question": input_prompt}) # Ключ "input" заменен на "question"
                         answer_text = (response or {}).get("answer", "").strip() # Ответ теперь в ключе "answer"
 
-                        if not answer_text or "не знаю" in answer_text.lower() or "нет ответа" in answer_text.lower():
+                        # Проверяем, был ли ответ "заглушкой", и логируем, если да
+                        if not answer_text or fallback_phrase in answer_text:
                             logging.warning(f"[BackgroundWB] Сгенерирован пустой или неуверенный ответ для вопроса {item_id}. Пропускаем отправку.")
+                            unanswered_logger.info(f"[Wildberries] QuestionID: {item_id}, Details: {json.dumps(item_to_answer, ensure_ascii=False)}")
                             continue
 
                         logging.info(f"[BackgroundWB] Ответ для вопроса {item_id} сгенерирован. Попытка отправки...")

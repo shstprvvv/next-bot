@@ -14,6 +14,10 @@ def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_ch
     user_tasks = {}
     user_messages = defaultdict(list)
 
+    # Получаем специальный логгер для неотвеченных вопросов
+    unanswered_logger = logging.getLogger('unanswered')
+    fallback_phrase = "К сожалению, у меня нет готового решения"
+
     async def process_user_messages(user_id, event):
         await asyncio.sleep(message_delay_seconds)
 
@@ -31,6 +35,10 @@ def setup_telegram_handlers(client, message_delay_seconds: int, get_or_create_ch
                 reply = normalize_reply(raw_reply)
             else:
                 reply = (raw_reply or "").strip().replace("```", "") or "Извините, я не смог обработать ваш запрос."
+
+            # Проверяем, был ли ответ "заглушкой"
+            if fallback_phrase in reply:
+                unanswered_logger.info(f"[Telegram] UserID: {user_id}, Question: '{full_message}'")
 
             await event.reply(reply)
             logging.info(f"[Telegram] Отправлен ответ для {user_id}: '{reply}'")
