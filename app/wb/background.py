@@ -8,15 +8,12 @@ async def background_wb_checker(
     wb_api_key: str,
     get_or_create_agent,
     get_unanswered_feedbacks_tool_factory,
+    post_answer_tool_factory,  # Добавляем фабрику инструмента отправки
     check_interval_seconds: int,
 ):
     """
-    Периодически проверяет и отвечает на отзывы/вопросы Wildberries.
-
-    - wb_api_key: строка ключа WB (если пусто — воркер завершится сразу)
-    - get_or_create_agent: callable(user_id: int, is_background_agent: bool) -> AgentExecutor
-    - get_unanswered_feedbacks_tool_factory: callable() -> Tool
-    - check_interval_seconds: период опроса
+    Периодически проверяет и отвечает на ВОПРОСЫ Wildberries.
+    (Функционал ответов на отзывы отключен для экономии)
     """
     if not wb_api_key:
         return
@@ -26,6 +23,7 @@ async def background_wb_checker(
 
     recently_answered_ids = deque(maxlen=100)
     unanswered_tool = get_unanswered_feedbacks_tool_factory()
+    post_tool = post_answer_tool_factory()  # Создаем экземпляр инструмента для отправки
 
     while True:
         try:
@@ -46,34 +44,63 @@ async def background_wb_checker(
             else:
                 logging.info(f"[BackgroundWB] Получено {len(items)} элементов. Поиск нового для ответа...")
 
-                item_to_answer = None
-                for item in items:
-                    if item.get("id") not in recently_answered_ids:
-                        item_to_answer = item
-                        break
+                # --- Новая логика: фильтруем только вопросы ---
+                questions_to_answer = [item for item in items if item.get("type") == "question"]
+                logging.info(f"[BackgroundWB] Найдено неотвеченных вопросов: {len(questions_to_answer)}")
 
-                if item_to_answer:
-                    item_id = item_to_answer.get("id")
-                    logging.info(f"[BackgroundWB] Найден новый элемент для ответа. ID: {item_id}")
 
-                    input_prompt = (
-                        f"Ответь на следующий отзыв/вопрос с ID {item_id}. "
-                        f"Вот его содержимое в формате JSON: {json.dumps(item_to_answer, ensure_ascii=False)}"
-                    )
-
-                    response = await agent_executor.ainvoke({"input": input_prompt})
-
-                    if response and response.get("output") and "не удалось" not in response.get("output").lower():
-                        logging.info(
-                            f"[BackgroundWB] Ответ на ID {item_id} считается успешным. Добавляю в кэш недавно отвеченных."
-                        )
-                        recently_answered_ids.append(item_id)
-                    else:
-                        logging.warning(
-                            f"[BackgroundWB] Попытка ответа на ID {item_id} могла быть неуспешной. Ответ агента: {response.get('output')}"
-                        )
+                if not questions_to_answer:
+                    logging.info("[BackgroundWB] Все полученные вопросы уже были недавно обработаны. Пропускаем цикл.")
                 else:
-                    logging.info("[BackgroundWB] Все полученные элементы уже были недавно обработаны. Пропускаем цикл.")
+                    logging.info(f"[BackgroundWB] Поиск нового вопроса для ответа...")
+
+                    item_to_answer = None
+                    for item in questions_to_answer: # Исправлена ошибка: итерируемся только по вопросам
+                        if item.get("id") not in recently_answered_ids:
+                            item_to_answer = item
+                            break
+
+                    if item_to_answer:
+                        item_id = item_to_answer.get("id")
+                        current_state = item_to_answer.get("state")  # Извлекаем текущий state
+                        logging.info(f"[BackgroundWB] Найден новый вопрос для ответа. ID: {item_id}, State: {current_state}")
+
+                        input_prompt = (
+                            f"Сгенерируй ответ на следующий вопрос покупателя с Wildberries. ID вопроса: {item_id}. "
+                            f"Содержимое вопроса в формате JSON: {json.dumps(item_to_answer, ensure_ascii=False)}"
+                        )
+
+                        # 1. Генерируем текстовый ответ
+                        response = await agent_executor.ainvoke({"question": input_prompt}) # Ключ "input" заменен на "question"
+                        answer_text = (response or {}).get("answer", "").strip() # Ответ теперь в ключе "answer"
+
+                        if not answer_text or "не знаю" in answer_text.lower() or "нет ответа" in answer_text.lower():
+                            logging.warning(f"[BackgroundWB] Сгенерирован пустой или неуверенный ответ для вопроса {item_id}. Пропускаем отправку.")
+                            continue
+
+                        logging.info(f"[BackgroundWB] Ответ для вопроса {item_id} сгенерирован. Попытка отправки...")
+
+                        # 2. Отправляем ответ через инструмент
+                        post_payload = json.dumps({
+                            "feedback_id": item_id,
+                            "text": answer_text,
+                            "type": item_to_answer.get("type"),
+                        })
+                        post_result = post_tool.func(post_payload)
+                        logging.info(f"[BackgroundWB] Результат отправки для {item_id}: {post_result}")
+
+                        # 3. Проверяем результат отправки
+                        if post_result and "отправлен" in post_result.lower():
+                            logging.info(
+                                f"[BackgroundWB] Ответ на вопрос ID {item_id} успешно отправлен. Добавляю в кэш."
+                            )
+                            recently_answered_ids.append(item_id)
+                        else:
+                            logging.warning(
+                                f"[BackgroundWB] Отправка ответа на вопрос ID {item_id} могла быть неуспешной."
+                            )
+                    else:
+                        logging.info("[BackgroundWB] Все полученные вопросы уже были недавно обработаны. Пропускаем цикл.")
 
         except Exception as e:
             logging.error(f"[BackgroundWB] Ошибка в фоновой задаче: {e}", exc_info=True)

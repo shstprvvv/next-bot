@@ -122,39 +122,53 @@ def get_unanswered_questions(max_items: int = 20, date_from=None) -> Optional[li
 
 
 def post_feedback_answer(feedback_id: str, text: str, item_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Отправляет ответ на отзыв или вопрос (единый эндпоинт /feedbacks/answer)."""
+    """Отправляет ответ на отзыв или вопрос, используя соответствующий эндпоинт и HTTP-метод PATCH."""
     if not WB_API_KEY:
         logging.error("[WildberriesAPI] API-ключ Wildberries не установлен.")
         return None
 
-    body = {
-        "id": feedback_id,
-        "text": text
-    }
+    # Определяем эндпоинт, тело запроса и лог в зависимости от типа
+    if item_type == "question":
+        url_suffix = "questions"
+        body = {
+            "id": feedback_id,
+            "answer": {
+                "text": text
+            },
+            "state": "wbRu"  # Правильный state из документации
+        }
+        log_label = "вопрос"
+    else:  # По умолчанию считаем, что это отзыв
+        url_suffix = "feedbacks"
+        body = {
+            "id": feedback_id,
+            "text": text
+        }
+        log_label = "отзыв"
 
-    def _post(url_suffix: str, log_label: str):
-        try:
-            logging.info(
-                f"[WildberriesAPI] Подготовка запроса: url={BASE_URL}/{url_suffix}, id={feedback_id}, text_len={len(text)}"
-            )
-            response = requests.post(f"{BASE_URL}/{url_suffix}", headers=_headers_feedbacks(), json=body)
-            response.raise_for_status()
-            logging.info(f"[WildberriesAPI] Отправка ответа на {log_label} {feedback_id}: {response.status_code}")
-            if response.status_code == 204:
-                return {"result": "success"}
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            error_details = ""
-            if e.response is not None:
-                try:
-                    error_details = e.response.json()
-                except json.JSONDecodeError:
-                    error_details = e.response.text
-            logging.error(f"[WildberriesAPI] Ошибка при отправке ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
-            return None
+    try:
+        logging.info(
+            f"[WildberriesAPI] Подготовка PATCH-запроса: url={BASE_URL}/{url_suffix}, id={feedback_id}, text_len={len(text)}"
+        )
+        # Используем PATCH вместо POST
+        response = requests.patch(f"{BASE_URL}/{url_suffix}", headers=_headers_feedbacks(), json=body)
+        response.raise_for_status()
+        logging.info(f"[WildberriesAPI] Отправка ответа на {log_label} {feedback_id}: {response.status_code}")
+        
+        # Успешный ответ WB часто возвращает пустое тело со статусом 200 или 204
+        if response.status_code in [200, 204] and not response.content:
+            return {"result": "success"}
 
-    # Всегда используем единый эндпоинт для публикации ответа (поддерживает вопросы и отзывы)
-    return _post("feedbacks/answer", "элемент")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        error_details = ""
+        if e.response is not None:
+            try:
+                error_details = e.response.json()
+            except json.JSONDecodeError:
+                error_details = e.response.text
+        logging.error(f"[WildberriesAPI] Ошибка при отправке PATCH-ответа на {log_label} {feedback_id}: {e}. Детали: {error_details}")
+        return None
 
 
 def get_chat_events(last_event_id: Optional[int] = None, next_token: Optional[int] = None, limit: int = 100) -> Optional[Dict[str, Any]]:

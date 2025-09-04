@@ -145,27 +145,24 @@ def get_or_create_chain(user_id: int):
 
 # --- Фоновая задача для проверки WB (отзывы/вопросы) ---
 async def start_background_workers():
-    """Фоновые задачи WB отключены для экономии."""
-    pass
-    # if WB_API_KEY:
-    #     asyncio.create_task(
-    #         background_wb_checker(
-    #             wb_api_key=WB_API_KEY,
-    #             get_or_create_agent=get_or_create_agent,
-    #             get_unanswered_feedbacks_tool_factory=get_unanswered_feedbacks_tool,
-    #             check_interval_seconds=WB_CHECK_INTERVAL_SECONDS,
-    #         )
-    #     )
-    #     asyncio.create_task(
-    #         background_wb_chat_responder(
-    #             wb_api_key=WB_API_KEY,
-    #             get_or_create_agent=get_or_create_agent,
-    #             get_chat_events_tool_factory=get_chat_events_tool,
-    #             post_chat_message_tool_factory=post_chat_message_tool,
-    #             poll_interval_seconds=WB_CHAT_POLLING_INTERVAL_SECONDS,
-    #             wb_chat_debug=WB_CHAT_DEBUG,
-    #         )
-    #     )
+    """Запускает фоновые задачи для WB, если API ключ предоставлен."""
+    if WB_API_KEY:
+        logging.info("[Main] Запуск фоновой задачи для ответов на вопросы WB...")
+        # Для фоновых задач создаем отдельный, stateless chain
+        wb_chain = create_conversational_chain(llm, retriever)
+        
+        asyncio.create_task(
+            background_wb_checker(
+                wb_api_key=WB_API_KEY,
+                get_or_create_agent=lambda user_id, is_background_agent: wb_chain, # Используем простой chain вместо агента
+                get_unanswered_feedbacks_tool_factory=wb_tools.get_unanswered_feedbacks_tool,
+                post_answer_tool_factory=wb_tools.post_feedback_answer_tool, # <-- Добавляем инструмент для отправки ответа
+                check_interval_seconds=WB_CHECK_INTERVAL_SECONDS,
+            )
+        )
+    else:
+        logging.info("[Main] WB_API_KEY не установлен, фоновые задачи WB не запускаются.")
+
 
 # --- Регистрация обработчиков Telegram ---
 setup_telegram_handlers(

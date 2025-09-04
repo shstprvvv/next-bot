@@ -89,19 +89,19 @@ def post_feedback_answer_tool():
             feedback_id = data.get("feedback_id")
             text = data.get("text")
             item_type = data.get("type") or _WB_ID_TO_TYPE_CACHE.get(feedback_id)
-            logging.info(
-                f"[WBTools] Подготовка ответа: id={feedback_id}, type={item_type}, text_len={(len(text) if isinstance(text, str) else 'n/a')}"
-            )
 
             if not feedback_id or not text:
-                return "Ошибка: в запросе должны быть 'feedback_id' и 'text'."
+                return f"Ошибка: в JSON должны быть 'feedback_id' и 'text'. Получено: {cleaned_input}"
 
-            # Ограничим длину ответа до ~400 символов, чтобы исключить скрытые отказы
-            safe_text = text if not isinstance(text, str) else (text[:400].rstrip() if len(text) > 400 else text)
+            logging.info(f"[WBTools] Подготовка ответа: id={feedback_id}, type={item_type}, text_len={len(text)}")
+
+            # Используем безопасную версию текста, чтобы избежать проблем с API
+            safe_text = text.strip()
+
             result = post_feedback_answer(feedback_id, safe_text, item_type=item_type)
-            if result is None:
-                return f"Не удалось отправить ответ на отзыв/вопрос {feedback_id}. Проверяйте логи [WildberriesAPI]."
-            return f"Ответ отправлен ({item_type or 'auto'}): {feedback_id}."
+
+            if result:
+                return f"Ответ на отзыв/вопрос {feedback_id} успешно отправлен."
 
         except json.JSONDecodeError:
             return "Ошибка: Неверный формат JSON. Ожидается объект с ключами 'feedback_id' и 'text'."
