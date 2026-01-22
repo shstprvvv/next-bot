@@ -55,6 +55,22 @@ next-bot/
 │   │   │   ├── __init__.py
 │   │   │   └── buffer_memory.py   # In-memory хранение диалогов
 │   │   │
+│   │   ├── orchestration/         # LangChain chains, agents, tools
+│   │   │   ├── __init__.py
+│   │   │   ├── chains/            # LangChain chains
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── qa_chain.py    # ConversationalRetrievalChain
+│   │   │   │   └── condense_chain.py  # Переформулировка вопроса
+│   │   │   ├── agents/            # LangChain agents
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── support_agent.py   # ReAct/Tool-calling agent
+│   │   │   │   └── stage_analyzer.py  # Классификатор стадии диалога
+│   │   │   └── tools/             # Tools для агентов
+│   │   │       ├── __init__.py
+│   │   │       ├── knowledge_tool.py  # Поиск по базе знаний
+│   │   │       ├── escalate_tool.py   # Эскалация на оператора
+│   │   │       └── wb_tools.py        # Инструменты WB API
+│   │   │
 │   │   └── channels/              # Входящие адаптеры (каналы)
 │   │       ├── __init__.py
 │   │       ├── telegram/
@@ -237,6 +253,181 @@ def setup_handlers(client, use_case: AnswerQuestionUseCase):
 
 ---
 
+### `app/adapters/orchestration/` — LangChain Chains, Agents, Tools
+
+Здесь живут все LangChain-специфичные конструкции. Это **адаптеры**, потому что:
+- Зависят от внешней библиотеки (LangChain)
+- Могут быть заменены (chain → agent, или вообще на свою реализацию)
+- Реализуют порты из `core/`
+
+#### `orchestration/chains/` — LangChain Chains
+
+Chains — это готовые "конвейеры" LangChain: retrieval + LLM, condense question, и т.д.
+
+```python
+# adapters/orchestration/chains/qa_chain.py
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from app.core.ports.llm import LLMClient
+
+class QAChainAdapter:
+    """Адаптер над ConversationalRetrievalChain, реализующий порт LLMClient."""
+    
+    def __init__(self, llm, retriever, prompt_template):
+        self._memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            output_key='answer'
+        )
+        self._chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever,
+            memory=self._memory,
+            combine_docs_chain_kwargs={"prompt": prompt_template},
+            return_source_documents=False,
+        )
+    
+    async def generate(self, question: str) -> str:
+        response = await self._chain.ainvoke({"question": question})
+        return response.get("answer", "")
+    
+    def clear_memory(self):
+        self._memory.clear()
+```
+
+```python
+# adapters/orchestration/chains/condense_chain.py
+from langchain.chains import LLMChain
+
+class CondenseQuestionChain:
+    """Переформулирует follow-up в самостоятельный вопрос."""
+    
+    def __init__(self, llm, prompt_template):
+        self._chain = LLMChain(llm=llm, prompt=prompt_template)
+    
+    async def rewrite(self, question: str, chat_history: list[str]) -> str:
+        history_text = "\n".join(chat_history[-6:])  # Последние 6 реплик
+        result = await self._chain.ainvoke({
+            "question": question,
+            "chat_history": history_text
+        })
+        return result["text"]
+```
+
+#### `orchestration/agents/` — LangChain Agents
+
+Agents — когда нужно динамически выбирать инструменты (tools) в зависимости от вопроса.
+
+```python
+# adapters/orchestration/agents/support_agent.py
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate
+
+class SupportAgentAdapter:
+    """Agent с инструментами для сложных сценариев поддержки."""
+    
+    def __init__(self, llm, tools: list, prompt: ChatPromptTemplate):
+        agent = create_tool_calling_agent(llm, tools, prompt)
+        self._executor = AgentExecutor(
+            agent=agent,
+            tools=tools,
+            verbose=True,
+            max_iterations=5,
+            handle_parsing_errors=True,
+        )
+    
+    async def execute(self, question: str) -> str:
+        result = await self._executor.ainvoke({"input": question})
+        return result.get("output", "")
+```
+
+```python
+# adapters/orchestration/agents/stage_analyzer.py
+from langchain.chains import LLMChain
+
+class StageAnalyzerAgent:
+    """
+    Определяет стадию диалога (как в SalesGPT).
+    Стадии: greeting, troubleshooting, followup_not_fixed, warranty_return, angry_user, etc.
+    """
+    
+    STAGES = {
+        "greeting": "Приветствие, начало диалога",
+        "troubleshooting": "Первичная диагностика проблемы", 
+        "followup_not_fixed": "Пользователь говорит 'не помогло'",
+        "new_topic": "Пользователь сменил тему",
+        "warranty_return": "Вопрос о возврате/гарантии",
+        "angry_user": "Негатив, жалоба",
+        "escalate": "Запрос живого оператора",
+    }
+    
+    def __init__(self, llm, prompt_template):
+        self._chain = LLMChain(llm=llm, prompt=prompt_template)
+    
+    async def analyze(self, message: str, chat_history: list[str]) -> str:
+        result = await self._chain.ainvoke({
+            "message": message,
+            "chat_history": "\n".join(chat_history[-10:]),
+            "stages": "\n".join(f"- {k}: {v}" for k, v in self.STAGES.items())
+        })
+        return result["text"].strip().lower()
+```
+
+#### `orchestration/tools/` — Tools для агентов
+
+Tools — это "функции", которые agent может вызывать. Каждый tool — обёртка над портом или внешним API.
+
+```python
+# adapters/orchestration/tools/knowledge_tool.py
+from langchain.tools import Tool
+from app.core.ports.retriever import KnowledgeRetriever
+
+def create_knowledge_tool(retriever: KnowledgeRetriever) -> Tool:
+    """Tool для поиска в базе знаний."""
+    
+    def search(query: str) -> str:
+        chunks = retriever.retrieve(query, k=6)
+        if not chunks:
+            return "Информация не найдена в базе знаний."
+        return "\n\n".join(c.content for c in chunks)
+    
+    return Tool(
+        name="KnowledgeBaseSearch",
+        func=search,
+        description="Поиск ответа в базе знаний NEXT. Используй для любых вопросов о продукте, настройках, проблемах."
+    )
+```
+
+```python
+# adapters/orchestration/tools/escalate_tool.py
+from langchain.tools import Tool
+
+def create_escalate_tool(notify_callback) -> Tool:
+    """Tool для эскалации на живого оператора."""
+    
+    def escalate(reason: str) -> str:
+        notify_callback(reason)  # Отправить уведомление оператору
+        return "Я передал ваш вопрос специалисту. Он скоро подключится к диалогу."
+    
+    return Tool(
+        name="EscalateToOperator",
+        func=escalate,
+        description="Вызови, когда не можешь помочь или пользователь просит живого оператора."
+    )
+```
+
+#### Когда использовать Chain vs Agent
+
+| Сценарий | Что использовать |
+|----------|------------------|
+| Простой Q&A по базе знаний | `ConversationalRetrievalChain` |
+| Нужно переформулировать follow-up | `CondenseQuestionChain` + QA Chain |
+| Нужно выбирать между несколькими действиями | Agent с tools |
+| Сложный multi-step сценарий (диагностика → решение → эскалация) | Agent |
+| Классификация интента/стадии | Отдельный `LLMChain` (StageAnalyzer) |
+
+---
+
 ### `app/prompts/` — Промпты как код
 
 **Важно**: промпт — это не строка в коде. Это конфигурация поведения LLM. Храни отдельно, версионируй, тестируй.
@@ -397,6 +588,24 @@ def main():
 2. Проверить, что splitter корректно режет
 3. Добавить regression-тесты
 
+### Новый LangChain Chain
+1. Создать `adapters/orchestration/chains/my_chain.py`
+2. Реализовать интерфейс, совместимый с портом (например, `LLMClient`)
+3. Промпт вынести в `prompts/`
+4. В `main.py` собрать и передать в Use Case
+
+### Новый LangChain Agent
+1. Создать `adapters/orchestration/agents/my_agent.py`
+2. Определить, какие tools нужны
+3. Создать tools в `adapters/orchestration/tools/`
+4. Промпт агента — в `prompts/`
+5. В `main.py` собрать agent + tools и передать в Use Case
+
+### Новый Tool для агента
+1. Создать `adapters/orchestration/tools/my_tool.py`
+2. Tool должен принимать порты через DI, а не создавать зависимости внутри
+3. Добавить в список tools при создании агента в `main.py`
+
 ---
 
 ## Антипаттерны (чего НЕ делать)
@@ -428,6 +637,45 @@ async def handler(event):
         await event.reply("Оформите возврат через WB")
 ```
 
+### ❌ Tool создаёт зависимости внутри себя
+```python
+# ПЛОХО: tool сам создаёт retriever
+def create_knowledge_tool() -> Tool:
+    retriever = FAISSRetriever(...)  # Зависимость создаётся внутри!
+    def search(query: str) -> str:
+        return retriever.retrieve(query)
+    return Tool(name="Search", func=search, ...)
+```
+
+```python
+# ХОРОШО: tool получает зависимости через DI
+def create_knowledge_tool(retriever: KnowledgeRetriever) -> Tool:
+    def search(query: str) -> str:
+        chunks = retriever.retrieve(query)  # Используем переданный порт
+        return "\n".join(c.content for c in chunks)
+    return Tool(name="Search", func=search, ...)
+```
+
+### ❌ Agent/Chain напрямую в Use Case
+```python
+# ПЛОХО: Use Case зависит от конкретного agent/chain
+from app.adapters.orchestration.agents.support_agent import SupportAgentAdapter
+
+class AnswerQuestionUseCase:
+    def __init__(self, agent: SupportAgentAdapter):  # Конкретный класс!
+        ...
+```
+
+```python
+# ХОРОШО: Use Case зависит от порта
+from app.core.ports.llm import LLMClient
+
+class AnswerQuestionUseCase:
+    def __init__(self, llm: LLMClient):  # Абстракция
+        ...
+# А SupportAgentAdapter реализует LLMClient
+```
+
 ---
 
 ## Резюме
@@ -437,8 +685,14 @@ async def handler(event):
 | `core/ports` | Интерфейсы | Ничего |
 | `core/use_cases` | Логика | Только ports |
 | `core/models` | Dataclasses | Ничего |
-| `adapters/` | Реализации | core + внешние библиотеки |
+| `adapters/llm` | LLM-провайдеры | core + langchain/openai |
+| `adapters/retriever` | Векторный поиск | core + faiss/pinecone |
+| `adapters/memory` | Хранение диалогов | core |
+| `adapters/orchestration/chains` | LangChain chains | core + langchain |
+| `adapters/orchestration/agents` | LangChain agents | core + langchain + tools |
+| `adapters/orchestration/tools` | Tools для агентов | core + внешние API |
+| `adapters/channels` | Telegram, WB, Web | core + telethon/requests |
 | `prompts/` | Шаблоны промптов | Ничего |
 | `main.py` | Сборка | Всё |
 
-**Главное правило**: если завтра надо заменить OpenAI на локальную Llama, поменять FAISS на Pinecone, добавить WhatsApp — это должно быть изменение в `adapters/` и `main.py`, без единой правки в `core/`.
+**Главное правило**: если завтра надо заменить OpenAI на Llama, поменять FAISS на Pinecone, переключиться с Chain на Agent — это изменение в `adapters/` и `main.py`, без единой правки в `core/`.
