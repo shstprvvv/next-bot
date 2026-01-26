@@ -3,10 +3,6 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime
-# from dotenv import load_dotenv
-
-# # Возвращаем load_dotenv для локального запуска
-# load_dotenv()
 
 from app.telegram.client import create_telegram_client
 from app.telegram.handlers import setup_telegram_handlers
@@ -57,9 +53,8 @@ TELETHON_SESSION_NAME = os.getenv('TELETHON_SESSION_NAME', 'sessions/user_sessio
 required_vars = {
     "TELETHON_API_ID": TELETHON_API_ID,
     "TELETHON_API_HASH": TELETHON_API_HASH,
+    "TELETHON_PHONE": TELETHON_PHONE,
     "OPENAI_API_KEY": OPENAI_API_KEY,
-    "OPENAI_API_BASE": OPENAI_API_BASE,
-    "WB_API_KEY": WB_API_KEY,
 }
 missing_vars = [key for key, value in required_vars.items() if not value]
 if missing_vars:
@@ -80,10 +75,10 @@ logging.info("[Main] Клиенты LLM и Telegram инициализирова
 # --- Создание retriever ---
 logging.info("[Main] Создание retriever для базы знаний...")
 retriever = create_retriever(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
-if retriever is None:
-    logging.critical("[Main] Не удалось создать retriever. Работа приложения невозможна.")
-    # В реальном приложении здесь может быть более graceful shutdown
-    exit("Retriever initialization failed.")
+RAG_AVAILABLE = retriever is not None
+if not RAG_AVAILABLE:
+    # Не блокируем запуск Telegram-функционала из-за проблем с эмбеддингами/балансом.
+    logging.error("[Main] Не удалось создать retriever. Запускаю приложение без базы знаний (fallback-режим).")
 
 # --- Функционал WB отключен для экономии средств ---
 # wb_tools = [] # Логика WB остается для будущего
@@ -136,10 +131,18 @@ def make_final_reply(raw_output: str) -> str:
 # --- Управление цепочками и памятью ---
 chain_store = {}
 
+class _FallbackChain:
+    async def ainvoke(self, _inputs):
+        # Минимальный оффлайн-ответ, чтобы Telegram-часть работала даже без LLM/RAG.
+        return {"answer": FRIENDLY_FALLBACK_MESSAGE}
+
 def get_or_create_chain(user_id: int):
     if user_id not in chain_store:
         logging.info(f"[Chain] Создание новой цепочки для пользователя {user_id}")
-        chain_store[user_id] = create_conversational_chain(llm, retriever)
+        if RAG_AVAILABLE:
+            chain_store[user_id] = create_conversational_chain(llm, retriever)
+        else:
+            chain_store[user_id] = _FallbackChain()
     return chain_store[user_id]
 
 

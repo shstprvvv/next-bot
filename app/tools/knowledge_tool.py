@@ -40,7 +40,14 @@ def create_retriever(api_key: str, base_url: str = None):
         vector_store = FAISS.from_documents(docs, embeddings)
         logging.info("[Retriever] Шаг 3: Векторная база успешно создана.")
 
-        retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+        retriever = vector_store.as_retriever(
+            search_type="mmr",  # Включаем алгоритм разнообразия
+            search_kwargs={
+                "k": 6,            # Берем 6 финальных кусков
+                "fetch_k": 20,     # Сначала ищем 20 кандидатов (чтобы было из чего выбирать)
+                "lambda_mult": 0.7 # 0.5 - макс. разнообразие, 1.0 - макс. точность. 0.7 - баланс.
+            }
+        )
         logging.info("[Retriever] Retriever успешно инициализирован.")
         return retriever
     except FileNotFoundError:
