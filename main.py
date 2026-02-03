@@ -1,211 +1,111 @@
 import os
 import logging
 import asyncio
-from collections import deque
 from datetime import datetime
 
-from app.telegram.client import create_telegram_client
-from app.telegram.handlers import setup_telegram_handlers
 from app.config import load_config
 from app.logging_config import setup_logging
-from langchain_openai import ChatOpenAI
-from langchain.tools import Tool
-from app.tools.knowledge_tool import create_knowledge_base_tool
-from app.tools.knowledge_tool import create_retriever
-# import aåpp.wb.tools
-# from app.wb.background import background_wb_checker, background_wb_chat_responder
-import json
 
-from app.chains.factory import create_conversational_chain
+# Core
+from app.core.use_cases.answer_question import AnswerQuestionUseCase
 
-# --- Загрузка конфигурации ---
-cfg = load_config()
-TELETHON_API_ID = cfg.get("TELETHON_API_ID")
-TELETHON_API_HASH = cfg.get("TELETHON_API_HASH")
-OPENAI_API_KEY = cfg.get("OPENAI_API_KEY")
-OPENAI_API_BASE = cfg.get("OPENAI_API_BASE")
-WB_API_KEY = cfg.get("WB_API_KEY")
-TELEGRAM_MESSAGE_DELAY_SECONDS = cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS")
+# Adapters
+from app.adapters.llm.langchain_adapter import LangChainLLMAdapter
+from app.adapters.retriever.faiss_adapter import FAISSRetrieverAdapter
+from app.adapters.channels.telegram_adapter import TelegramAdapter
+from app.adapters.channels.wildberries.client import WBClient
+from app.adapters.channels.wildberries.worker import WBQuestionsWorker
 
-# Убираем отладочный вывод, он был нужен для Docker
-# --- ОТЛАДОЧНЫЙ ВЫВОД ---
-# print("--- [DEBUG] Проверка переменных окружения ---")
-# print(f"OPENAI_API_KEY: {'...' + OPENAI_API_KEY[-4:] if OPENAI_API_KEY else 'НЕ УСТАНОВЛЕН'}")
-# print(f"OPENAI_API_BASE: {OPENAI_API_BASE or 'НЕ УСТАНОВЛЕН'}")
-# print("---------------------------------------------")
+# Telegram Client (старый, но рабочий)
+from app.telegram.client import create_telegram_client
 
-# --- Настройка логирования ---
-setup_logging()
-logging.info("[Main] Конфигурация загружена.")
-
-TELETHON_PHONE = cfg.get("TELETHON_PHONE")
-TELEGRAM_PASSWORD = cfg.get("TELEGRAM_PASSWORD")
-WB_CHECK_INTERVAL_SECONDS = cfg["WB_CHECK_INTERVAL_SECONDS"]
-WB_CHAT_POLLING_INTERVAL_SECONDS = cfg["WB_CHAT_POLLING_INTERVAL_SECONDS"]
-WB_CHAT_DEBUG = cfg["WB_CHAT_DEBUG"]
-
-
-# --- Инициализация LLM и Telegram клиента ---
-logging.info("[Main] Инициализация клиентов...")
-TELETHON_SESSION_NAME = os.getenv('TELETHON_SESSION_NAME', 'sessions/user_session')
-
-# Убедимся, что все необходимые переменные окружения загружены
-required_vars = {
-    "TELETHON_API_ID": TELETHON_API_ID,
-    "TELETHON_API_HASH": TELETHON_API_HASH,
-    "TELETHON_PHONE": TELETHON_PHONE,
-    "OPENAI_API_KEY": OPENAI_API_KEY,
-}
-missing_vars = [key for key, value in required_vars.items() if not value]
-if missing_vars:
-    raise ValueError(f"Переменные окружения не установлены: {', '.join(missing_vars)}. Проверьте ваш .env файл.")
-
-client = create_telegram_client(
-    TELETHON_SESSION_NAME, 
-    TELETHON_API_ID, 
-    TELETHON_API_HASH
-)
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    openai_api_key=OPENAI_API_KEY,
-    base_url=OPENAI_API_BASE,
-)
-logging.info("[Main] Клиенты LLM и Telegram инициализированы.")
-
-# --- Создание retriever ---
-logging.info("[Main] Создание retriever для базы знаний...")
-retriever = create_retriever(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
-RAG_AVAILABLE = retriever is not None
-if not RAG_AVAILABLE:
-    # Не блокируем запуск Telegram-функционала из-за проблем с эмбеддингами/балансом.
-    logging.error("[Main] Не удалось создать retriever. Запускаю приложение без базы знаний (fallback-режим).")
-
-# --- Функционал WB отключен для экономии средств ---
-# wb_tools = [] # Логика WB остается для будущего
-# logging.info("[Main] Функционал Wildberries отключен для экономии средств.")
-
-
-# --- Системные промпты для агента ---
-# Больше не нужны, так как промпт теперь внутри Chain
-# agent_prompt = get_agent_prompt()
-
-
-STARTUP_TIME = datetime.now()
-logging.info(f"[Main] Время запуска зафиксировано: {STARTUP_TIME.isoformat()}")
-
-# --- Перехват и нормализация ответа перед отправкой ---
-FRIENDLY_FALLBACK_MESSAGE = (
-    "К сожалению, у меня нет готового решения для вашего вопроса. Мы изучим проблему более детально и вернемся с ответом чуть позже. Приносим извинения за неудобства."
-)
-
-BLOCK_PHRASES = [
-    "Agent stopped due to iteration limit or time limit",
-    "AgentExecutor stopped due to iteration limit",
-    "Could not parse LLM output",
-    "Tool input is malformed",
-    "Invalid or incomplete tool call",
-    # Добавим фразы, которые может вернуть chain при отсутствии ответа
-    "не знаю ответа",
-    "не могу ответить",
-]
-
-def _sanitize_text(text: str) -> str:
-    if not isinstance(text, str):
-        return ""
-    # Убираем стандартные символы разметки и лишние пробелы по краям.
-    # Важно: не используем " ".join(cleaned.split()), чтобы сохранить переносы строк.
-    cleaned = text.strip().replace("```", "").replace("###", "").replace("---", "").strip()
-    return cleaned
-
-def make_final_reply(raw_output: str) -> str:
-    cleaned = _sanitize_text(raw_output)
-    if not cleaned:
-        return FRIENDLY_FALLBACK_MESSAGE
-    low = cleaned.lower()
-    for phrase in BLOCK_PHRASES:
-        if phrase.lower() in low:
-            logging.info("[ReplyGuard] Перехвачен служебный или пустой ответ, заменяю на дружелюбный fallback.")
-            return FRIENDLY_FALLBACK_MESSAGE
-    return cleaned
-
-# --- Управление цепочками и памятью ---
-chain_store = {}
-
-class _FallbackChain:
-    async def ainvoke(self, _inputs):
-        # Минимальный оффлайн-ответ, чтобы Telegram-часть работала даже без LLM/RAG.
-        return {"answer": FRIENDLY_FALLBACK_MESSAGE}
-
-def get_or_create_chain(user_id: int):
-    if user_id not in chain_store:
-        logging.info(f"[Chain] Создание новой цепочки для пользователя {user_id}")
-        if RAG_AVAILABLE:
-            chain_store[user_id] = create_conversational_chain(llm, retriever)
-        else:
-            chain_store[user_id] = _FallbackChain()
-    return chain_store[user_id]
-
-
-# --- Фоновая задача для проверки WB (отзывы/вопросы) ---
-async def start_background_workers():
-    """Фоновые задачи WB отключены для экономии."""
-    pass
-    # if WB_API_KEY:
-    #     asyncio.create_task(
-    #         background_wb_checker(
-    #             wb_api_key=WB_API_KEY,
-    #             get_or_create_agent=get_or_create_agent,
-    #             get_unanswered_feedbacks_tool_factory=get_unanswered_feedbacks_tool,
-    #             check_interval_seconds=WB_CHECK_INTERVAL_SECONDS,
-    #         )
-    #     )
-    #     asyncio.create_task(
-    #         background_wb_chat_responder(
-    #             wb_api_key=WB_API_KEY,
-    #             get_or_create_agent=get_or_create_agent,
-    #             get_chat_events_tool_factory=get_chat_events_tool,
-    #             post_chat_message_tool_factory=post_chat_message_tool,
-    #             poll_interval_seconds=WB_CHAT_POLLING_INTERVAL_SECONDS,
-    #             wb_chat_debug=WB_CHAT_DEBUG,
-    #         )
-    #     )
-
-# --- Регистрация обработчиков Telegram ---
-setup_telegram_handlers(
-    client=client,
-    message_delay_seconds=TELEGRAM_MESSAGE_DELAY_SECONDS,
-    get_or_create_chain=get_or_create_chain,
-    normalize_reply=make_final_reply,
-)
-
-# --- Запуск приложения ---
 async def main():
-    """Основная функция для запуска бота и фоновых задач."""
-    logging.info("[Main] Запуск Telegram-ассистента...")
+    # 1. Настройка логирования
+    setup_logging()
+    logging.info("[Main] Запуск AI Support Bot (Clean Architecture)...")
+    
+    # 2. Загрузка конфига
+    cfg = load_config()
+    
+    # 3. Инициализация Адаптеров (Infrastructure Layer)
+    logging.info("[Main] Инициализация адаптеров...")
+    
+    # LLM
+    llm_adapter = LangChainLLMAdapter(
+        api_key=cfg.get("OPENAI_API_KEY"),
+        base_url=cfg.get("OPENAI_API_BASE"),
+        model_name="gpt-4o-mini",
+        temperature=0.0
+    )
+    
+    # Retriever (FAISS)
+    retriever_adapter = FAISSRetrieverAdapter(
+        index_path="faiss_index",
+        knowledge_base_path="knowledge_base.md",
+        openai_api_key=cfg.get("OPENAI_API_KEY"),
+        openai_api_base=cfg.get("OPENAI_API_BASE")
+    )
+    
+    # 4. Инициализация Use Cases (Application Layer)
+    logging.info("[Main] Сборка Use Cases...")
+    answer_use_case = AnswerQuestionUseCase(
+        llm=llm_adapter, 
+        retriever=retriever_adapter
+    )
+    
+    # 5. Инициализация Каналов (Presentation Layer)
+    
+    # --- Wildberries ---
+    wb_api_key = cfg.get("WB_API_KEY")
+    if wb_api_key:
+        logging.info("[Main] Подключение к Wildberries (Вопросы)...")
+        wb_client = WBClient(api_key=wb_api_key)
+        
+        # Настройка интервала проверки (по умолчанию 300 сек = 5 мин)
+        check_interval = int(cfg.get("WB_CHECK_INTERVAL_SECONDS", 300))
+        
+        wb_worker = WBQuestionsWorker(
+            wb_client=wb_client,
+            use_case=answer_use_case,
+            check_interval=check_interval,
+            ignore_older_than_days=0 # 0 = отвечать только на вопросы, пришедшие после запуска бота
+        )
+        # Запускаем как фоновую задачу
+        asyncio.create_task(wb_worker.start())
+    else:
+        logging.warning("[Main] WB_API_KEY не найден. Модуль Wildberries отключен.")
 
-    # Запускаем фоновые задачи WB
-    await start_background_workers()
-
-    # Запускаем клиент Telegram
-    # Получаем учетные данные прямо перед запуском
+    # --- Telegram ---
+    logging.info("[Main] Подключение к Telegram...")
+    
+    telethon_client = create_telegram_client(
+        session_name=os.getenv('TELETHON_SESSION_NAME', 'sessions/user_session'),
+        api_id=cfg.get("TELETHON_API_ID"),
+        api_hash=cfg.get("TELETHON_API_HASH")
+    )
+    
+    # Подключаем наш адаптер к клиенту
+    telegram_adapter = TelegramAdapter(
+        client=telethon_client,
+        use_case=answer_use_case,
+        message_delay=cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS", 2)
+    )
+    
+    # 6. Запуск Telegram (блокирующий вызов в конце)
     phone = cfg.get("TELETHON_PHONE")
     password = cfg.get("TELEGRAM_PASSWORD")
-
-    # --- ОТЛАДОЧНЫЙ ВЫВОД ---
-    logging.info(f"--- [DEBUG] Проверка TELETHON_PHONE перед запуском: '{phone}' ---")
-
-    if not phone:
-        logging.critical("[Main] TELETHON_PHONE не найден в конфигурации. Запуск невозможен.")
-        return
-
-    await client.start(
-        phone=phone,
-        password=password
-    )
-    logging.info("[Main] Клиент Telegram запущен.")
-    await client.run_until_disconnected()
+    
+    logging.info(f"[Main] Старт клиента Telegram (phone={phone})...")
+    
+    await telethon_client.start(phone=phone, password=password)
+    logging.info("[Main] Бот запущен и готов к работе! 🚀")
+    
+    await telethon_client.run_until_disconnected()
 
 if __name__ == "__main__":
-    # Убираем лишний `with client:`, который вызывает конфликт и падение
-    # Теперь клиент запускается только один раз внутри функции main()
-    client.loop.run_until_complete(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("[Main] Остановка бота...")
+    except Exception as e:
+        logging.critical(f"[Main] Критическая ошибка: {e}", exc_info=True)

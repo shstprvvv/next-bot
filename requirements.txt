@@ -10,3 +10,4 @@ requests==2.32.3
 unstructured[md]==0.16.1
 tiktoken==0.8.0
 nltk==3.9.1
+httpx==0.27.0
