@@ -2,24 +2,29 @@ import os
 import logging
 import asyncio
 from datetime import datetime
+from dotenv import load_dotenv
 
 from app.config import load_config
 from app.logging_config import setup_logging
 
 # Core
 from app.core.use_cases.answer_question import AnswerQuestionUseCase
+from app.core.use_cases.reply_to_feedback import ReplyToFeedbackUseCase
 
 # Adapters
 from app.adapters.llm.langchain_adapter import LangChainLLMAdapter
 from app.adapters.retriever.faiss_adapter import FAISSRetrieverAdapter
 from app.adapters.channels.telegram_adapter import TelegramAdapter
 from app.adapters.channels.wildberries.client import WBClient
-from app.adapters.channels.wildberries.worker import WBQuestionsWorker
+from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker
 
 # Telegram Client (старый, но рабочий)
 from app.telegram.client import create_telegram_client
 
 async def main():
+    # 0. Загрузка переменных окружения (для локального запуска)
+    load_dotenv()
+
     # 1. Настройка логирования
     setup_logging()
     logging.info("[Main] Запуск AI Support Bot (Clean Architecture)...")
@@ -52,26 +57,41 @@ async def main():
         llm=llm_adapter, 
         retriever=retriever_adapter
     )
+    feedback_use_case = ReplyToFeedbackUseCase(
+        llm=llm_adapter,
+        retriever=retriever_adapter
+    )
     
     # 5. Инициализация Каналов (Presentation Layer)
     
     # --- Wildberries ---
     wb_api_key = cfg.get("WB_API_KEY")
     if wb_api_key:
-        logging.info("[Main] Подключение к Wildberries (Вопросы)...")
+        logging.info("[Main] Подключение к Wildberries...")
         wb_client = WBClient(api_key=wb_api_key)
         
         # Настройка интервала проверки (по умолчанию 300 сек = 5 мин)
         check_interval = int(cfg.get("WB_CHECK_INTERVAL_SECONDS", 300))
         
-        wb_worker = WBQuestionsWorker(
+        # Воркер вопросов
+        wb_questions_worker = WBQuestionsWorker(
             wb_client=wb_client,
             use_case=answer_use_case,
             check_interval=check_interval,
-            ignore_older_than_days=0 # 0 = отвечать только на вопросы, пришедшие после запуска бота
+            ignore_older_than_days=30 # Проверяем вопросы за последние 30 дней
         )
-        # Запускаем как фоновую задачу
-        asyncio.create_task(wb_worker.start())
+        
+        # Воркер отзывов
+        wb_feedbacks_worker = WBFeedbacksWorker(
+            wb_client=wb_client,
+            use_case=feedback_use_case,
+            check_interval=check_interval,
+            ignore_older_than_days=30 # Проверяем отзывы за последние 30 дней
+        )
+        
+        # Запускаем как фоновые задачи
+        asyncio.create_task(wb_questions_worker.start())
+        asyncio.create_task(wb_feedbacks_worker.start())
     else:
         logging.warning("[Main] WB_API_KEY не найден. Модуль Wildberries отключен.")
 

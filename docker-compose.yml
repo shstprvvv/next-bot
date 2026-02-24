@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: smart-bot
+    restart: always
+    volumes:
+      - ./sessions:/app/sessions
+      - ./faiss_index:/app/faiss_index
+      - ./knowledge_base.md:/app/knowledge_base.md
+      - ./terminals:/app/terminals # Для логов, если нужно
+    env_file:
+      - .env
+    command: python3 main.py

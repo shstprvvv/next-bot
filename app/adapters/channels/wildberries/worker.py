@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from app.adapters.channels.wildberries.client import WBClient
 from app.core.use_cases.answer_question import AnswerQuestionUseCase
+from app.core.use_cases.reply_to_feedback import ReplyToFeedbackUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +22,17 @@ class WBQuestionsWorker:
         else:
             self.start_date = datetime.now()
             
-        logger.info(f"[WBWorker] Будут обрабатываться вопросы, созданные после: {self.start_date}")
+        logger.info(f"[WBWorker-Questions] Будут обрабатываться вопросы, созданные после: {self.start_date}")
 
     async def start(self):
         self.is_running = True
-        logger.info("[WBWorker] Запуск фоновой проверки вопросов Wildberries...")
+        logger.info("[WBWorker-Questions] Запуск фоновой проверки вопросов Wildberries...")
         
         while self.is_running:
             try:
                 await self.process_new_questions()
             except Exception as e:
-                logger.error(f"[WBWorker] Глобальная ошибка в цикле: {e}", exc_info=True)
+                logger.error(f"[WBWorker-Questions] Глобальная ошибка в цикле: {e}", exc_info=True)
             
             await asyncio.sleep(self.check_interval)
 
@@ -52,23 +53,92 @@ class WBQuestionsWorker:
 
             # Формируем контекст для LLM
             full_query = f"Вопрос по товару '{product_name}': {q_text}"
-            logger.info(f"[WBWorker] Обработка вопроса {q_id}: {full_query}")
+            logger.info(f"[WBWorker-Questions] Обработка вопроса {q_id}: {full_query}")
 
             # 1. Получаем ответ от нейросети
-            # Передаем user_id=0 или специальный ID для WB, чтобы не смешивать с историей Telegram
             answer = await self.use_case.execute(user_id=f"wb_question_{q_id}", question=full_query, history=[])
 
             # 2. Отправляем ответ в WB
-            success = await self.wb_client.send_answer(id=q_id, text=answer)
+            success = await self.wb_client.answer_question(id=q_id, text=answer)
             
             if success:
-                logger.info(f"[WBWorker] Ответ на {q_id} успешно опубликован.")
+                logger.info(f"[WBWorker-Questions] Ответ на вопрос {q_id} успешно опубликован.")
             else:
-                logger.warning(f"[WBWorker] Не удалось опубликовать ответ на {q_id}.")
+                logger.warning(f"[WBWorker-Questions] Не удалось опубликовать ответ на вопрос {q_id}.")
             
-            # Небольшая пауза между ответами, чтобы не спамить
+            # Небольшая пауза между ответами
             await asyncio.sleep(2)
 
     def stop(self):
         self.is_running = False
-        logger.info("[WBWorker] Остановка...")
+        logger.info("[WBWorker-Questions] Остановка...")
+
+
+class WBFeedbacksWorker:
+    def __init__(self, wb_client: WBClient, use_case: ReplyToFeedbackUseCase, check_interval: int = 300, ignore_older_than_days: int = 0):
+        self.wb_client = wb_client
+        self.use_case = use_case
+        self.check_interval = check_interval
+        self.is_running = False
+        
+        if ignore_older_than_days > 0:
+            self.start_date = datetime.now() - timedelta(days=ignore_older_than_days)
+        else:
+            self.start_date = datetime.now()
+            
+        logger.info(f"[WBWorker-Feedbacks] Будут обрабатываться отзывы, созданные после: {self.start_date}")
+
+    async def start(self):
+        self.is_running = True
+        logger.info("[WBWorker-Feedbacks] Запуск фоновой проверки отзывов Wildberries...")
+        
+        while self.is_running:
+            try:
+                await self.process_new_feedbacks()
+            except Exception as e:
+                logger.error(f"[WBWorker-Feedbacks] Глобальная ошибка в цикле: {e}", exc_info=True)
+            
+            await asyncio.sleep(self.check_interval)
+
+    async def process_new_feedbacks(self):
+        feedbacks = await self.wb_client.get_unanswered_feedbacks(date_from=self.start_date)
+        
+        if not feedbacks:
+            return
+
+        for fb in feedbacks:
+            fb_id = fb.get("id")
+            fb_text = fb.get("text", "")
+            valuation = fb.get("productValuation", 5) # По умолчанию 5, если не указано
+            product_name = fb.get("productDetails", {}).get("productName", "")
+            
+            if not fb_id:
+                continue
+            
+            # НОВАЯ ЛОГИКА: Пропускаем отзывы с оценкой 5 звезд
+            if valuation == 5:
+                logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: 5 звезд).")
+                continue
+            
+            logger.info(f"[WBWorker-Feedbacks] Обработка отзыва {fb_id} (Оценка: {valuation}): {fb_text}")
+
+            # 1. Генерируем ответ
+            answer = await self.use_case.execute(
+                review_text=fb_text, 
+                valuation=valuation, 
+                product_name=product_name
+            )
+
+            # 2. Отправляем ответ
+            success = await self.wb_client.answer_feedback(id=fb_id, text=answer)
+            
+            if success:
+                logger.info(f"[WBWorker-Feedbacks] Ответ на отзыв {fb_id} успешно опубликован.")
+            else:
+                logger.warning(f"[WBWorker-Feedbacks] Не удалось опубликовать ответ на отзыв {fb_id}.")
+            
+            await asyncio.sleep(2)
+
+    def stop(self):
+        self.is_running = False
+        logger.info("[WBWorker-Feedbacks] Остановка...")
