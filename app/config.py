@@ -11,6 +11,7 @@ def load_config():
         "TELEGRAM_PASSWORD": os.getenv("TELEGRAM_PASSWORD"), # Добавляем загрузку пароля
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
         "OPENAI_API_BASE": os.getenv("OPENAI_API_BASE"),
+        "OPENAI_MODEL_NAME": os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"), # По умолчанию gpt-4o-mini
         "WB_API_KEY": os.getenv("WB_API_KEY"),
         "WB_CHAT_POLLING_INTERVAL_SECONDS": int(os.getenv("WB_CHAT_POLLING_INTERVAL_SECONDS", 300)),
         "WB_CHECK_INTERVAL_SECONDS": int(os.getenv("WB_CHECK_INTERVAL_SECONDS", 300)),

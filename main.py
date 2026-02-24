@@ -39,7 +39,7 @@ async def main():
     llm_adapter = LangChainLLMAdapter(
         api_key=cfg.get("OPENAI_API_KEY"),
         base_url=cfg.get("OPENAI_API_BASE"),
-        model_name="gpt-4o-mini",
+        model_name=cfg.get("OPENAI_MODEL_NAME"),
         temperature=0.0
     )
     
