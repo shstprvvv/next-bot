@@ -20,12 +20,34 @@ class ReplyToFeedbackUseCase:
         # 1. Поиск в базе знаний (только если есть текст отзыва)
         context = ""
         if review_text and len(review_text) > 3:
-            logging.info(f"[FeedbackUseCase] Ищу в базе по отзыву: {review_text[:50]}...")
-            chunks = self.retriever.retrieve(query=review_text)
-            
-            if chunks:
-                context = "\n\n".join([c.content for c in chunks])
-                logging.info(f"[FeedbackUseCase] Найдено {len(chunks)} фрагментов.")
+            reformulate_prompt = f"""Ты — умный маршрутизатор отзывов покупателей.
+Мы продаем Смарт ТВ приставки на Wildberries. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами.
+Товар: {product_name}. Оценка: {valuation} звезд.
+Покупатель написал отзыв: "{review_text}"
+
+Перепиши суть жалобы или вопроса из отзыва в четкий поисковый запрос для базы знаний техподдержки.
+- Если жалуются на конкретную проблему (например, "зависает", "греется", "не работает пульт"), сделай из этого поисковый запрос (например: "почему приставка зависает").
+- Если в отзыве нет конкретной проблемы, а просто общие эмоции, напиши "нет конкретной проблемы".
+- Не отвечай на отзыв! Просто напиши ОДНУ фразу — поисковый запрос.
+
+Поисковый запрос:"""
+
+            logging.info(f"[FeedbackUseCase] Исходный отзыв: {review_text[:50]}...")
+            try:
+                # Делаем быстрый запрос к LLM для получения идеальной поисковой фразы
+                search_query = await self.llm.generate(reformulate_prompt)
+                search_query = search_query.strip(' \n"')
+                logging.info(f"[FeedbackUseCase] Переписанный запрос для FAISS: {search_query}")
+            except Exception as e:
+                logging.error(f"[FeedbackUseCase] Ошибка переписывания запроса, использую оригинал. Ошибка: {e}")
+                search_query = review_text
+                
+            if search_query.lower() not in ["нет конкретной проблемы", "нет конкретной проблемы.", ""]:
+                chunks = self.retriever.retrieve(query=search_query)
+                
+                if chunks:
+                    context = "\n\n".join([c.content for c in chunks])
+                    logging.info(f"[FeedbackUseCase] Найдено {len(chunks)} фрагментов.")
         
         # 2. Сборка промпта
         prompt = build_feedback_prompt(

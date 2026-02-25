@@ -56,7 +56,7 @@ class WBQuestionsWorker:
             logger.info(f"[WBWorker-Questions] Обработка вопроса {q_id}: {full_query}")
 
             # 1. Получаем ответ от нейросети
-            answer = await self.use_case.execute(user_id=f"wb_question_{q_id}", question=full_query, history=[])
+            answer = await self.use_case.execute(user_id=f"wb_question_{q_id}", question=full_query, history=[], source="wb")
 
             # 2. Отправляем ответ в WB
             success = await self.wb_client.answer_question(id=q_id, text=answer)
