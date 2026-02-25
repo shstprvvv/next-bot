@@ -15,6 +15,7 @@ class TelegramAdapter:
         self.user_messages = defaultdict(list)
         self.user_tasks = {}
         self.operator_mode_chats = set() # Чаты, где управление перехвачено оператором
+        self.chat_history = defaultdict(list) # Храним историю диалогов (в памяти)
         
         # Регистрация хендлеров
         self.client.add_event_handler(self.handle_incoming_message, events.NewMessage())
@@ -61,7 +62,11 @@ class TelegramAdapter:
         self.user_tasks[chat_id] = asyncio.create_task(self.process_messages(chat_id, event))
 
     async def process_messages(self, user_id, event):
-        await asyncio.sleep(self.message_delay)
+        try:
+            await asyncio.sleep(self.message_delay)
+        except asyncio.CancelledError:
+            # Нормально: пришло новое сообщение, старую задачу отменили (debounce)
+            return
         
         if user_id not in self.user_messages:
             return
@@ -69,8 +74,8 @@ class TelegramAdapter:
         full_message = " ".join(self.user_messages.pop(user_id))
         logger.info(f"[Telegram] Обработка для {user_id}: '{full_message}'")
         
-        # Здесь мы можем доставать историю диалога из базы (пока заглушка)
-        history = [] 
+        # Здесь мы достаем историю диалога из памяти (пока в ОЗУ)
+        history = self.chat_history[user_id].copy()
         
         # Вызов Use Case
         try:
@@ -81,8 +86,19 @@ class TelegramAdapter:
             await event.reply(answer)
             logger.info(f"[Telegram] Ответ отправлен {user_id}")
             
+            # Сохраняем в историю текущий шаг
+            self.chat_history[user_id].append(f"Клиент: {full_message}")
+            self.chat_history[user_id].append(f"Бот: {answer}")
+            
+            # Ограничиваем историю в памяти (например, храним только 20 последних сообщений)
+            if len(self.chat_history[user_id]) > 20:
+                self.chat_history[user_id] = self.chat_history[user_id][-20:]
+            
         except Exception as e:
             logger.error(f"[Telegram] Ошибка обработки: {e}", exc_info=True)
-            await event.reply("Произошла ошибка при обработке вашего запроса.")
+            try:
+                await event.reply("Произошла ошибка при обработке вашего запроса.")
+            except Exception:
+                logger.warning("[Telegram] Не удалось отправить сообщение об ошибке.", exc_info=True)
         finally:
             self.user_tasks.pop(user_id, None)

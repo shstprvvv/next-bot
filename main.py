@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import signal
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -21,6 +22,19 @@ from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedba
 # Telegram Client (старый, но рабочий)
 from app.telegram.client import create_telegram_client
 
+
+def _validate_config(cfg: dict) -> None:
+    missing = []
+    for key in ["TELETHON_API_ID", "TELETHON_API_HASH"]:
+        if not cfg.get(key):
+            missing.append(key)
+
+    if missing:
+        raise RuntimeError(f"Missing required env/config keys: {', '.join(missing)}")
+
+    if not cfg.get("TELETHON_PHONE"):
+        logging.warning("[Main] TELETHON_PHONE не задан. Если сессия Telegram ещё не авторизована, старт может потребовать телефон.")
+
 async def main():
     # 0. Загрузка переменных окружения (для локального запуска)
     load_dotenv()
@@ -31,6 +45,18 @@ async def main():
     
     # 2. Загрузка конфига
     cfg = load_config()
+    _validate_config(cfg)
+
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    cleanup_started = False
+
+    def _loop_exception_handler(_loop, context):
+        msg = context.get("message", "Unhandled exception in event loop")
+        exc = context.get("exception")
+        logging.critical(f"[Asyncio] {msg}: {exc}", exc_info=exc)
+
+    loop.set_exception_handler(_loop_exception_handler)
     
     # 3. Инициализация Адаптеров (Infrastructure Layer)
     logging.info("[Main] Инициализация адаптеров...")
@@ -66,6 +92,10 @@ async def main():
     
     # --- Wildberries ---
     wb_api_key = cfg.get("WB_API_KEY")
+    wb_client = None
+    wb_tasks: list[asyncio.Task] = []
+    wb_questions_worker = None
+    wb_feedbacks_worker = None
     if wb_api_key:
         logging.info("[Main] Подключение к Wildberries...")
         wb_client = WBClient(api_key=wb_api_key)
@@ -90,8 +120,8 @@ async def main():
         )
         
         # Запускаем как фоновые задачи
-        asyncio.create_task(wb_questions_worker.start())
-        asyncio.create_task(wb_feedbacks_worker.start())
+        wb_tasks.append(asyncio.create_task(wb_questions_worker.start(), name="wb_questions_worker"))
+        wb_tasks.append(asyncio.create_task(wb_feedbacks_worker.start(), name="wb_feedbacks_worker"))
     else:
         logging.warning("[Main] WB_API_KEY не найден. Модуль Wildberries отключен.")
 
@@ -115,12 +145,62 @@ async def main():
     phone = cfg.get("TELETHON_PHONE")
     password = cfg.get("TELEGRAM_PASSWORD")
     
+    async def shutdown():
+        nonlocal cleanup_started
+        if cleanup_started:
+            return
+        cleanup_started = True
+        logging.info("[Main] Получен сигнал остановки. Завершаю работу...")
+        stop_event.set()
+
+        if wb_questions_worker is not None:
+            wb_questions_worker.stop()
+        if wb_feedbacks_worker is not None:
+            wb_feedbacks_worker.stop()
+
+        for t in wb_tasks:
+            t.cancel()
+
+        try:
+            await telethon_client.disconnect()
+        except Exception:
+            logging.warning("[Main] Ошибка при отключении Telegram клиента.", exc_info=True)
+
+        if wb_client is not None:
+            try:
+                await wb_client.aclose()
+            except Exception:
+                logging.warning("[Main] Ошибка при закрытии WB клиента.", exc_info=True)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown()))
+        except NotImplementedError:
+            # например, при некоторых окружениях signal handlers не поддерживаются
+            pass
+
+    backoff_s = 3
     logging.info(f"[Main] Старт клиента Telegram (phone={phone})...")
-    
-    await telethon_client.start(phone=phone, password=password)
-    logging.info("[Main] Бот запущен и готов к работе! 🚀")
-    
-    await telethon_client.run_until_disconnected()
+    while not stop_event.is_set():
+        try:
+            await telethon_client.start(phone=phone, password=password)
+            logging.info("[Main] Бот запущен и готов к работе!")
+            await telethon_client.run_until_disconnected()
+
+            if stop_event.is_set():
+                break
+
+            logging.warning(f"[Main] Telegram отключился. Переподключение через {backoff_s} сек...")
+            await asyncio.sleep(backoff_s)
+            backoff_s = min(60, backoff_s * 2)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logging.error(f"[Main] Ошибка Telegram цикла: {e}", exc_info=True)
+            await asyncio.sleep(backoff_s)
+            backoff_s = min(60, backoff_s * 2)
+
+    await shutdown()
 
 if __name__ == "__main__":
     try:
