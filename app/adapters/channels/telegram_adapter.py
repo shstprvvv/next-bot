@@ -87,7 +87,12 @@ class TelegramAdapter:
         # Вызов Use Case
         try:
             # Уведомляем Telegram, что "печатаем" (опционально)
-            async with self.client.action(user_id, 'typing'):
+            try:
+                input_chat = await event.get_input_chat()
+                async with self.client.action(input_chat, 'typing'):
+                    answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
+            except ValueError as e:
+                logger.warning(f"[Telegram] Ошибка при отправке typing action: {e}. Выполняем без него.")
                 answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
             
             # Если бот уже долго не может решить проблему (больше 4 сообщений) и отвечает отмазками
