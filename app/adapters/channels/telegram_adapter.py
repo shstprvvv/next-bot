@@ -55,22 +55,36 @@ class TelegramAdapter:
         if not hasattr(self, 'user_attempts'):
             self.user_attempts = defaultdict(int)
 
-        # 3. Обработка фото/видео и текста
+        # 3. Обработка фото/видео/аудио и текста
         image_base64 = None
         has_media = False
         media_type = "Unknown"
+        is_audio = False
         
-        # Надежная проверка на медиафайлы в Telethon
-        if getattr(event, 'message', None) and getattr(event.message, 'media', None):
-            media_type = type(event.message.media).__name__
-            # Ловим фото и документы (часто фото шлют как документы)
-            if 'Photo' in media_type or 'Document' in media_type:
-                has_media = True
+        if getattr(event, 'message', None):
+            if getattr(event.message, 'voice', None) or getattr(event.message, 'audio', None):
+                is_audio = True
+            elif getattr(event.message, 'media', None):
+                media_type = type(event.message.media).__name__
+                if 'Photo' in media_type or 'Document' in media_type:
+                    has_media = True
         elif getattr(event, 'photo', None) or getattr(event, 'document', None):
             has_media = True
             media_type = "DirectEventMedia"
 
-        if has_media:
+        if is_audio:
+            logger.info(f"[Telegram] Получено голосовое сообщение от {chat_id}, пытаюсь скачать и расшифровать...")
+            try:
+                audio_bytes = await self.client.download_media(event.message, file=bytes)
+                if audio_bytes:
+                    transcript = await self.use_case.llm.transcribe_audio(audio_bytes)
+                    logger.info(f"[Telegram] Голосовое сообщение успешно расшифровано: {transcript}")
+                    text = f"{text} {transcript}".strip()
+            except Exception as e:
+                logger.error(f"[Telegram] Ошибка при обработке аудио: {e}")
+                await event.reply("К сожалению, я не смог расшифровать ваше голосовое сообщение. Пожалуйста, напишите текстом! 🎙️❌")
+                return
+        elif has_media:
             logger.info(f"[Telegram] Получено медиа (тип: {media_type}) от {chat_id}, пытаюсь скачать...")
             try:
                 # Скачиваем медиа в память

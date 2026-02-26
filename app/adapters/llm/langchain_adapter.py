@@ -1,10 +1,12 @@
 import logging
 import os
+import tempfile
 from typing import Union, List, Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from app.core.ports.llm import LLMClient
 from app.utils.retry import RetryPolicy, async_retry
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,14 @@ class LangChainLLMAdapter(LLMClient):
             # Ретраи делаем централизованно ниже, чтобы не было "двойных" повторов.
             max_retries=0,
         )
+        # Инициализируем нативный клиент OpenAI для работы с аудио (Whisper)
+        self.openai_async_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout_s,
+            max_retries=0,
+        )
+        
         self._retry_policy = RetryPolicy(
             max_attempts=max(1, max_retries + 1),
             base_delay_s=float(os.getenv("LLM_RETRY_BASE_DELAY_SECONDS", "0.75")),
@@ -49,6 +59,34 @@ class LangChainLLMAdapter(LLMClient):
             return response.content
         except Exception as e:
             logger.error(f"[LangChainAdapter] Ошибка генерации: {e}", exc_info=True)
+            raise
+
+    async def transcribe_audio(self, audio_bytes: bytes) -> str:
+        async def _call():
+            # Записываем байты во временный файл, так как API OpenAI требует файл с расширением
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+                
+            try:
+                with open(tmp_path, "rb") as f:
+                    transcript = await self.openai_async_client.audio.transcriptions.create(
+                        model="whisper-1", 
+                        file=f
+                    )
+                return transcript.text
+            finally:
+                os.remove(tmp_path)
+
+        try:
+            return await async_retry(
+                _call,
+                policy=self._retry_policy,
+                retry_on=self._retry_on,
+                is_retryable=self._is_retryable_error,
+            )
+        except Exception as e:
+            logger.error(f"[LangChainAdapter] Ошибка распознавания аудио: {e}", exc_info=True)
             raise
 
     @staticmethod
