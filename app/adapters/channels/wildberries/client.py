@@ -65,7 +65,7 @@ class WBClient:
                     logger.warning(
                         f"[WBClient] {method} {url} -> {resp.status_code}. Retry in {delay:.1f}s (attempt {attempt}/{max_attempts})"
                     )
-                    resp.close()
+                    await resp.aclose()
                     if attempt >= max_attempts:
                         logger.error(f"[WBClient] Исчерпаны ретраи: {resp.status_code}: {resp.text}")
                         return None
@@ -74,14 +74,14 @@ class WBClient:
 
                 resp.raise_for_status()
                 data = resp.json()
-                resp.close()
+                await resp.aclose()
                 return data
 
             except httpx.HTTPStatusError as e:
                 # 4xx (кроме 429) — обычно не ретраим
                 logger.error(f"[WBClient] Ошибка API {e.response.status_code}: {e.response.text}")
                 try:
-                    e.response.close()
+                    await e.response.aclose()
                 except Exception:
                     pass
                 return None
