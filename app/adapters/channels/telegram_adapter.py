@@ -23,6 +23,13 @@ class TelegramAdapter:
     async def handle_incoming_message(self, event):
         chat_id = event.chat_id
         text = event.raw_text.strip()
+        
+        # Обработка фото/видео (если текста нет или есть медиа)
+        if event.media:
+            logger.info(f"[Telegram] Получено медиа от {chat_id}")
+            if chat_id not in self.operator_mode_chats:
+                await event.reply("Вижу ваш файл! 📷 К сожалению, я пока не умею просматривать картинки и видео. Опишите, пожалуйста, проблему словами — что именно вы видите на экране?")
+            return
 
         # 1. Обработка команд оператора (исходящие сообщения от меня или входящие команды)
         # Если сообщение исходящее (event.out) и это команда
@@ -95,6 +102,20 @@ class TelegramAdapter:
                 logger.warning(f"[Telegram] Ошибка при отправке typing action: {e}. Выполняем без него.")
                 answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
             
+            # ЗАГЛУШКА НА ГЛУПЫЕ ОТВЕТЫ
+            stop_phrases = [
+                "нет готового решения", 
+                "к сожалению, у меня нет",
+                "изучим проблему более детально",
+                "я всего лишь",
+                "я искусственный интеллект",
+                "я языковая модель"
+            ]
+            
+            if any(phrase in answer.lower() for phrase in stop_phrases):
+                logger.warning(f"[Telegram] Сработала заглушка стоп-слов! Исходный ответ бота: {answer}")
+                answer = "Уточните, пожалуйста, на каком этапе возникает проблема? Какие индикаторы горят на самой приставке? Что именно пишет на экране телевизора?"
+
             # Если бот уже долго не может решить проблему (больше 4 сообщений) и отвечает отмазками
             if self.user_attempts[user_id] >= 4 and ("нет готового решения" in answer or "к сожалению" in answer.lower()):
                 answer = (
@@ -121,9 +142,6 @@ class TelegramAdapter:
             
         except Exception as e:
             logger.error(f"[Telegram] Ошибка обработки: {e}", exc_info=True)
-            try:
-                await event.reply("Произошла ошибка при обработке вашего запроса.")
-            except Exception:
-                logger.warning("[Telegram] Не удалось отправить сообщение об ошибке.", exc_info=True)
+            # Убрали отправку сообщения об ошибке "Произошла ошибка при обработке вашего запроса."
         finally:
             self.user_tasks.pop(user_id, None)
