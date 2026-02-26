@@ -58,13 +58,18 @@ class TelegramAdapter:
         # 3. Обработка фото/видео и текста
         image_base64 = None
         has_media = False
+        media_type = "Unknown"
         
-        if hasattr(event, 'message') and event.message.media:
-            # Проверяем, является ли медиа фото или документом (картинкой)
+        # Надежная проверка на медиафайлы в Telethon
+        if getattr(event, 'message', None) and getattr(event.message, 'media', None):
             media_type = type(event.message.media).__name__
+            # Ловим фото и документы (часто фото шлют как документы)
             if 'Photo' in media_type or 'Document' in media_type:
                 has_media = True
-        
+        elif getattr(event, 'photo', None) or getattr(event, 'document', None):
+            has_media = True
+            media_type = "DirectEventMedia"
+
         if has_media:
             logger.info(f"[Telegram] Получено медиа (тип: {media_type}) от {chat_id}, пытаюсь скачать...")
             try:
