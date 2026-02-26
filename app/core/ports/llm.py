@@ -1,6 +1,6 @@
-from typing import Protocol
+from typing import Protocol, Union, List, Dict, Any
 
 class LLMClient(Protocol):
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: Union[str, List[Dict[str, Any]]]) -> str:
         """Генерирует ответ по готовому промпту."""
         ...

@@ -9,19 +9,36 @@ class AnswerQuestionUseCase:
     llm: LLMClient
     retriever: KnowledgeRetriever
     
-    async def execute(self, user_id: int | str, question: str, history: list[str] = None, source: str = "telegram") -> str:
+    async def execute(self, user_id: int | str, question: str, history: list[str] = None, source: str = "telegram", image_base64: str = None) -> str:
         """
         Главный сценарий:
-        1. Переписать запрос с учетом контекста (ТВ приставки / приложение).
-        2. Найти информацию в базе по переписанному запросу.
-        3. Собрать промпт.
-        4. Получить ответ от LLM.
+        1. Если есть картинка - распознаем ее.
+        2. Переписать запрос с учетом контекста (ТВ приставки / приложение).
+        3. Найти информацию в базе по переписанному запросу.
+        4. Собрать промпт.
+        5. Получить ответ от LLM.
         """
         if history is None:
             history = []
 
         # Передаем в контекст последние 10 сообщений диалога
         history_text = "\n".join(history[-10:]) if history else "Нет истории"
+
+        # 0. Если пришла картинка - сначала просим LLM описать ее
+        if image_base64:
+            logging.info(f"[UseCase] Получено изображение, отправляю на анализ в LLM...")
+            vision_prompt = [
+                {"type": "text", "text": "Ты эксперт технической поддержки. Клиент прислал фото своей проблемы с ТВ-приставкой. Кратко опиши, что ты видишь на экране (какая ошибка, какой интерфейс) или на устройстве. Если текста нет, опиши ситуацию."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ]
+            try:
+                image_description = await self.llm.generate(vision_prompt)
+                logging.info(f"[UseCase] Описание картинки: {image_description}")
+                # Добавляем описание картинки к вопросу пользователя
+                question = f"[Пользователь прислал фото. Описание фото: {image_description}]\nТекст пользователя: {question}"
+            except Exception as e:
+                logging.error(f"[UseCase] Ошибка при распознавании картинки: {e}")
+                question = f"[Пользователь прислал фото, но я не смог его распознать]\nТекст пользователя: {question}"
 
         # 1. Переписываем запрос (Context Enrichment)
         if source == "wb":

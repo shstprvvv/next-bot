@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import base64
 from collections import defaultdict
 from telethon import events, TelegramClient
 from app.core.use_cases.answer_question import AnswerQuestionUseCase
@@ -24,13 +25,6 @@ class TelegramAdapter:
         chat_id = event.chat_id
         text = event.raw_text.strip()
         
-        # Обработка фото/видео (если текста нет или есть медиа)
-        if event.media:
-            logger.info(f"[Telegram] Получено медиа от {chat_id}")
-            if chat_id not in self.operator_mode_chats:
-                await event.reply("Вижу ваш файл! 📷 К сожалению, я пока не умею просматривать картинки и видео. Опишите, пожалуйста, проблему словами — что именно вы видите на экране?")
-            return
-
         # 1. Обработка команд оператора (исходящие сообщения от меня или входящие команды)
         # Если сообщение исходящее (event.out) и это команда
         if event.out:
@@ -61,11 +55,30 @@ class TelegramAdapter:
         if not hasattr(self, 'user_attempts'):
             self.user_attempts = defaultdict(int)
 
-        # 3. Стандартная логика бота
+        # 3. Обработка фото/видео и текста
+        image_base64 = None
+        if event.media:
+            logger.info(f"[Telegram] Получено медиа от {chat_id}, пытаюсь скачать...")
+            try:
+                # Скачиваем медиа в память
+                media_bytes = await event.download_media(file=bytes)
+                if media_bytes:
+                    image_base64 = base64.b64encode(media_bytes).decode('utf-8')
+                    logger.info(f"[Telegram] Медиа успешно скачано и сконвертировано в base64.")
+            except Exception as e:
+                logger.error(f"[Telegram] Ошибка при скачивании медиа: {e}")
+                # Если не получилось скачать, просто извинимся как раньше
+                await event.reply("Вижу ваш файл! 📷 К сожалению, я не смог его открыть. Опишите, пожалуйста, проблему словами — что именно вы видите на экране?")
+                return
+
+        # Если текста нет, а картинка есть, ставим заглушку для логики
+        if not text and image_base64:
+            text = "[Пользователь прислал только фото без текста]"
+
         logger.info(f"[Telegram] Сообщение от {chat_id}: '{text}'")
 
-        # Логика склеивания сообщений (debounce)
-        self.user_messages[chat_id].append(text)
+        # Сохраняем сообщение и картинку (берем последнюю присланную)
+        self.user_messages[chat_id].append({"text": text, "image": image_base64})
         
         if chat_id in self.user_tasks:
             self.user_tasks[chat_id].cancel()
@@ -82,8 +95,13 @@ class TelegramAdapter:
         if user_id not in self.user_messages:
             return
             
-        full_message = " ".join(self.user_messages.pop(user_id))
-        logger.info(f"[Telegram] Обработка для {user_id}: '{full_message}'")
+        messages_data = self.user_messages.pop(user_id)
+        # Склеиваем весь текст
+        full_message = " ".join([m["text"] for m in messages_data if m["text"]])
+        # Берем последнюю картинку из серии (если их было несколько)
+        image_base64 = next((m["image"] for m in reversed(messages_data) if m["image"]), None)
+
+        logger.info(f"[Telegram] Обработка для {user_id}: '{full_message}' (с картинкой: {bool(image_base64)})")
         
         # Здесь мы достаем историю диалога из памяти (пока в ОЗУ)
         history = self.chat_history[user_id].copy()
@@ -97,10 +115,10 @@ class TelegramAdapter:
             try:
                 input_chat = await event.get_input_chat()
                 async with self.client.action(input_chat, 'typing'):
-                    answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
+                    answer = await self.use_case.execute(user_id, full_message, history, source="telegram", image_base64=image_base64)
             except ValueError as e:
                 logger.warning(f"[Telegram] Ошибка при отправке typing action: {e}. Выполняем без него.")
-                answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
+                answer = await self.use_case.execute(user_id, full_message, history, source="telegram", image_base64=image_base64)
             
             # ЗАГЛУШКА НА ГЛУПЫЕ ОТВЕТЫ
             stop_phrases = [

@@ -1,6 +1,8 @@
 import logging
 import os
+from typing import Union, List, Dict, Any
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
 from app.core.ports.llm import LLMClient
 from app.utils.retry import RetryPolicy, async_retry
 
@@ -28,9 +30,13 @@ class LangChainLLMAdapter(LLMClient):
 
         self._retry_on = self._build_retryable_exceptions()
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: Union[str, List[Dict[str, Any]]]) -> str:
         async def _call():
-            # invoke/ainvoke в новых версиях LangChain принимает строку или список сообщений
+            # Если пришел список (например, с картинкой), оборачиваем в HumanMessage
+            if isinstance(prompt, list):
+                messages = [HumanMessage(content=prompt)]
+                return await self.client.ainvoke(messages)
+            # Иначе просто отправляем строку
             return await self.client.ainvoke(prompt)
 
         try:
