@@ -50,6 +50,10 @@ class TelegramAdapter:
             logger.info(f"[Operator] Сообщение от {chat_id} пропущено (ручной режим).")
             return
 
+        # Отслеживаем попытки (чтобы предложить возврат, если тупим)
+        if not hasattr(self, 'user_attempts'):
+            self.user_attempts = defaultdict(int)
+
         # 3. Стандартная логика бота
         logger.info(f"[Telegram] Сообщение от {chat_id}: '{text}'")
 
@@ -77,12 +81,28 @@ class TelegramAdapter:
         # Здесь мы достаем историю диалога из памяти (пока в ОЗУ)
         history = self.chat_history[user_id].copy()
         
+        # Увеличиваем счетчик сообщений для отслеживания "тупняков"
+        self.user_attempts[user_id] += 1
+        
         # Вызов Use Case
         try:
             # Уведомляем Telegram, что "печатаем" (опционально)
             async with self.client.action(user_id, 'typing'):
-                answer = await self.use_case.execute(user_id, full_message, history)
+                answer = await self.use_case.execute(user_id, full_message, history, source="telegram")
             
+            # Если бот уже долго не может решить проблему (больше 4 сообщений) и отвечает отмазками
+            if self.user_attempts[user_id] >= 4 and ("нет готового решения" in answer or "к сожалению" in answer.lower()):
+                answer = (
+                    "К сожалению, я уже несколько раз попытался найти решение, но дистанционно помочь не получается. 😔\n\n"
+                    "Похоже, что ваша приставка или пульт имеет заводской брак или техническую неисправность.\n"
+                    "Напоминаю, что на товар действует гарантия 1 год! Вы можете легко вернуть приставку через личный кабинет Wildberries:\n"
+                    "1. Зайдите в покупки.\n"
+                    "2. Выберите приставку и нажмите «Оформить возврат».\n"
+                    "3. Обязательно укажите причину «Брак» и приложите видео неисправности.\n\n"
+                    "Мы без проблем одобрим возврат, и вы получите деньги обратно."
+                )
+                self.user_attempts[user_id] = 0 # Сбрасываем счетчик после предложения возврата
+
             await event.reply(answer)
             logger.info(f"[Telegram] Ответ отправлен {user_id}")
             
