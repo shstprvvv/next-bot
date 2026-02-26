@@ -57,10 +57,16 @@ class TelegramAdapter:
 
         # 3. Обработка фото/видео и текста
         image_base64 = None
-        has_media = bool(event.media) or bool(getattr(event.message, 'photo', None)) or bool(getattr(event.message, 'document', None))
+        has_media = False
+        
+        if hasattr(event, 'message') and event.message.media:
+            # Проверяем, является ли медиа фото или документом (картинкой)
+            media_type = type(event.message.media).__name__
+            if 'Photo' in media_type or 'Document' in media_type:
+                has_media = True
         
         if has_media:
-            logger.info(f"[Telegram] Получено медиа от {chat_id}, пытаюсь скачать...")
+            logger.info(f"[Telegram] Получено медиа (тип: {media_type}) от {chat_id}, пытаюсь скачать...")
             try:
                 # Скачиваем медиа в память
                 media_bytes = await self.client.download_media(event.message, file=bytes)
