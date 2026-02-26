@@ -63,7 +63,7 @@ class TelegramAdapter:
             logger.info(f"[Telegram] Получено медиа от {chat_id}, пытаюсь скачать...")
             try:
                 # Скачиваем медиа в память
-                media_bytes = await event.download_media(file=bytes)
+                media_bytes = await self.client.download_media(event.message, file=bytes)
                 if media_bytes:
                     image_base64 = base64.b64encode(media_bytes).decode('utf-8')
                     logger.info(f"[Telegram] Медиа успешно скачано и сконвертировано в base64.")
