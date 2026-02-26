@@ -57,7 +57,9 @@ class TelegramAdapter:
 
         # 3. Обработка фото/видео и текста
         image_base64 = None
-        if event.media:
+        has_media = bool(event.media) or bool(getattr(event.message, 'photo', None)) or bool(getattr(event.message, 'document', None))
+        
+        if has_media:
             logger.info(f"[Telegram] Получено медиа от {chat_id}, пытаюсь скачать...")
             try:
                 # Скачиваем медиа в память
