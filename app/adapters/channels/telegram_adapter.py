@@ -99,11 +99,8 @@ class TelegramAdapter:
                 return
 
         # Если после всех проверок текста всё равно нет (это может быть стикер, GIF или неизвестное медиа)
-        if not text:
-            logger.info(f"[Telegram] Получено пустое сообщение от {chat_id}, отправляю заглушку.")
-            await event.reply("Вижу ваш файл/сообщение! 📷 К сожалению, я пока могу отвечать только на текст. Опишите, пожалуйста, проблему словами, и я постараюсь помочь!")
-            return
-
+        # Убрали раннюю заглушку отсюда, перенесли в process_messages
+        
         logger.info(f"[Telegram] Сообщение от {chat_id}: '{text}'")
 
         # Сохраняем сообщение и картинку (берем последнюю присланную)
@@ -125,12 +122,18 @@ class TelegramAdapter:
             return
             
         messages_data = self.user_messages.pop(user_id)
-        # Склеиваем весь текст
-        full_message = " ".join([m["text"] for m in messages_data if m["text"]])
+        # Склеиваем весь текст, убирая лишние пробелы
+        full_message = " ".join([m["text"] for m in messages_data if m["text"]]).strip()
         # Берем последнюю картинку из серии (если их было несколько)
         image_base64 = next((m["image"] for m in reversed(messages_data) if m["image"]), None)
 
         logger.info(f"[Telegram] Обработка для {user_id}: '{full_message}' (с картинкой: {bool(image_base64)})")
+        
+        # ЖЕЛЕЗОБЕТОННАЯ ЗАГЛУШКА ДЛЯ ПУСТЫХ СООБЩЕНИЙ (Стикеры, GIF, нераспознанные фото)
+        if not full_message and not image_base64:
+            logger.warning(f"[Telegram] Итоговое сообщение от {user_id} оказалось пустым. Отправляю заглушку.")
+            await event.reply("Вижу ваш файл/сообщение! 📷 К сожалению, я пока могу отвечать только на текст или голосовые. Опишите, пожалуйста, проблему словами, и я постараюсь помочь!")
+            return
         
         # Здесь мы достаем историю диалога из памяти (пока в ОЗУ)
         history = self.chat_history[user_id].copy()
