@@ -115,9 +115,13 @@ class WBFeedbacksWorker:
             if not fb_id:
                 continue
             
-            # НОВАЯ ЛОГИКА: Пропускаем отзывы с оценкой 5 звезд
+            # НОВАЯ ЛОГИКА: Пропускаем отзывы с оценкой 5 звезд или отзывы без текста
             if valuation == 5:
                 logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: 5 звезд).")
+                continue
+                
+            if not fb_text or fb_text.strip() == "":
+                logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: {valuation}, но нет текста).")
                 continue
             
             logger.info(f"[WBWorker-Feedbacks] Обработка отзыва {fb_id} (Оценка: {valuation}): {fb_text}")
