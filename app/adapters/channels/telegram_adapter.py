@@ -40,9 +40,20 @@ class TelegramAdapter:
 
     async def handle_incoming_message(self, event):
         chat_id = event.chat_id
-        text = event.raw_text.strip()
+        text = event.raw_text.strip() if event.raw_text else ""
         
-        logger.info(f"[Telegram-Raw] Входящее событие от {chat_id}. Текст: '{text}', Медиа: {type(event.media).__name__ if event.media else 'Нет'}, Фото: {bool(getattr(event.message, 'photo', None))}, Документ: {bool(getattr(event.message, 'document', None))}")
+        # Получаем тип медиа для логов
+        media_type = "Нет"
+        has_photo = False
+        has_document = False
+        
+        if getattr(event, 'message', None):
+            if getattr(event.message, 'media', None):
+                media_type = type(event.message.media).__name__
+            has_photo = bool(getattr(event.message, 'photo', None))
+            has_document = bool(getattr(event.message, 'document', None))
+            
+        logger.info(f"[Telegram-Raw] Входящее событие от {chat_id}. Текст: '{text}', Медиа: {media_type}, Фото: {has_photo}, Документ: {has_document}")
 
         # 2. Обработка входящих сообщений от пользователей
         if not event.is_private:
