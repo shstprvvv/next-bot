@@ -19,28 +19,30 @@ class TelegramAdapter:
         self.chat_history = defaultdict(list) # Храним историю диалогов (в памяти)
         
         # Регистрация хендлеров
-        self.client.add_event_handler(self.handle_incoming_message, events.NewMessage())
+        # Ловим абсолютно все входящие сообщения, включая фото, альбомы и файлы
+        self.client.add_event_handler(self.handle_incoming_message, events.NewMessage(incoming=True))
+        self.client.add_event_handler(self.handle_outgoing_message, events.NewMessage(outgoing=True))
+
+    async def handle_outgoing_message(self, event):
+        """Обработка команд оператора (исходящие сообщения)"""
+        chat_id = event.chat_id
+        text = event.raw_text.strip()
+        
+        if text == '/takeover':
+            self.operator_mode_chats.add(chat_id)
+            logger.info(f"[Operator] Управление чатом {chat_id} перехвачено оператором.")
+            await event.delete()
+        elif text == '/bot':
+            if chat_id in self.operator_mode_chats:
+                self.operator_mode_chats.remove(chat_id)
+                logger.info(f"[Operator] Управление чатом {chat_id} возвращено боту.")
+            await event.delete()
 
     async def handle_incoming_message(self, event):
         chat_id = event.chat_id
         text = event.raw_text.strip()
         
-        # 1. Обработка команд оператора (исходящие сообщения от меня или входящие команды)
-        # Если сообщение исходящее (event.out) и это команда
-        if event.out:
-            if text == '/takeover':
-                self.operator_mode_chats.add(chat_id)
-                logger.info(f"[Operator] Управление чатом {chat_id} перехвачено.")
-                await event.delete()
-                return
-            elif text == '/bot':
-                if chat_id in self.operator_mode_chats:
-                    self.operator_mode_chats.remove(chat_id)
-                    logger.info(f"[Operator] Управление чатом {chat_id} возвращено боту.")
-                await event.delete()
-                return
-            # Остальные исходящие игнорируем
-            return
+        logger.info(f"[Telegram-Raw] Входящее событие от {chat_id}. Текст: '{text}', Медиа: {type(event.media).__name__ if event.media else 'Нет'}, Фото: {bool(getattr(event.message, 'photo', None))}, Документ: {bool(getattr(event.message, 'document', None))}")
 
         # 2. Обработка входящих сообщений от пользователей
         if not event.is_private:
@@ -73,15 +75,18 @@ class TelegramAdapter:
             media_type = "DirectEventMedia"
 
         if is_audio:
-            logger.info(f"[Telegram] Получено голосовое сообщение от {chat_id}, пытаюсь скачать и расшифровать...")
+            logger.info(f"[Telegram] Получено голосовое сообщение от {chat_id}, размер: {getattr(event.message.document, 'size', 'unknown')} байт, пытаюсь скачать и расшифровать...")
             try:
                 audio_bytes = await self.client.download_media(event.message, file=bytes)
                 if audio_bytes:
+                    logger.info(f"[Telegram] Аудио успешно скачано ({len(audio_bytes)} байт), отправляю в Whisper...")
                     transcript = await self.use_case.llm.transcribe_audio(audio_bytes)
                     logger.info(f"[Telegram] Голосовое сообщение успешно расшифровано: {transcript}")
                     text = f"{text} {transcript}".strip()
+                else:
+                    logger.warning(f"[Telegram] Не удалось скачать аудио (download_media вернул None)")
             except Exception as e:
-                logger.error(f"[Telegram] Ошибка при обработке аудио: {e}")
+                logger.error(f"[Telegram] Ошибка при обработке аудио: {e}", exc_info=True)
                 await event.reply("К сожалению, я не смог расшифровать ваше голосовое сообщение. Пожалуйста, напишите текстом! 🎙️❌")
                 return
         elif has_media:
@@ -91,9 +96,11 @@ class TelegramAdapter:
                 media_bytes = await self.client.download_media(event.message, file=bytes)
                 if media_bytes:
                     image_base64 = base64.b64encode(media_bytes).decode('utf-8')
-                    logger.info(f"[Telegram] Медиа успешно скачано и сконвертировано в base64.")
+                    logger.info(f"[Telegram] Медиа успешно скачано и сконвертировано в base64. Размер base64: {len(image_base64)} символов.")
+                else:
+                    logger.warning(f"[Telegram] Не удалось скачать медиа (download_media вернул None)")
             except Exception as e:
-                logger.error(f"[Telegram] Ошибка при скачивании медиа: {e}")
+                logger.error(f"[Telegram] Ошибка при скачивании медиа: {e}", exc_info=True)
                 # Если не получилось скачать, просто извинимся как раньше
                 await event.reply("Вижу ваш файл! 📷 К сожалению, я не смог его открыть. Опишите, пожалуйста, проблему словами — что именно вы видите на экране?")
                 return
