@@ -79,7 +79,7 @@ class TelegramAdapter:
         if getattr(event, 'message', None):
             if getattr(event.message, 'media', None):
                 media_type = type(event.message.media).__name__
-                # Ловим абсолютно любые медиа: фото, видео, документы (файлы), стикеры, WebP, альбомы
+                # Ловим абсолютно любые медиа
                 has_media = True
                 
                 # Дополнительная проверка на голосовые сообщения и аудио
@@ -96,6 +96,12 @@ class TelegramAdapter:
         elif getattr(event, 'photo', None) or getattr(event, 'document', None) or getattr(event, 'media', None):
             has_media = True
             media_type = "DirectEventMedia"
+
+        # ЖЕСТКАЯ ЗАГЛУШКА НА ВХОДЕ ДЛЯ ВИДЕО, СТИКЕРОВ И Т.Д. (всё, что не фото и не голос)
+        if has_media and not is_audio and 'Photo' not in media_type:
+            logger.info(f"[Telegram] Получено неподдерживаемое медиа (тип: {media_type}) от {chat_id}, мгновенная заглушка.")
+            await event.reply("Вижу ваш файл/сообщение! 📷 К сожалению, я пока умею смотреть только обычные фотографии (не видео и не файлы). Опишите, пожалуйста, проблему словами, и я постараюсь помочь!")
+            return
 
         if is_audio:
             logger.info(f"[Telegram] Получено голосовое сообщение от {chat_id}, размер: {getattr(event.message.document, 'size', 'unknown')} байт, пытаюсь скачать и расшифровать...")
