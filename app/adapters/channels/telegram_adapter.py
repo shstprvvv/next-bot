@@ -47,6 +47,7 @@ class TelegramAdapter:
         has_photo = False
         has_document = False
         
+        # Проверяем медиа через message.media
         if getattr(event, 'message', None):
             if getattr(event.message, 'media', None):
                 media_type = type(event.message.media).__name__
@@ -112,9 +113,8 @@ class TelegramAdapter:
                     logger.warning(f"[Telegram] Не удалось скачать медиа (download_media вернул None)")
             except Exception as e:
                 logger.error(f"[Telegram] Ошибка при скачивании медиа: {e}", exc_info=True)
-                # Если не получилось скачать, просто извинимся как раньше
-                await event.reply("Вижу ваш файл! 📷 К сожалению, я не смог его открыть. Опишите, пожалуйста, проблему словами — что именно вы видите на экране?")
-                return
+                # Убираем старую заглушку отсюда, так как теперь есть общая заглушка в process_messages
+                logger.warning(f"[Telegram] Игнорируем ошибку скачивания, чтобы сработала общая заглушка.")
 
         # Если после всех проверок текста всё равно нет (это может быть стикер, GIF или неизвестное медиа)
         # Убрали раннюю заглушку отсюда, перенесли в process_messages
