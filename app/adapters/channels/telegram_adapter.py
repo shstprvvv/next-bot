@@ -75,13 +75,24 @@ class TelegramAdapter:
         media_type = "Unknown"
         is_audio = False
         
+        # Получаем тип медиа для логов
         if getattr(event, 'message', None):
-            if getattr(event.message, 'voice', None) or getattr(event.message, 'audio', None):
-                is_audio = True
-            elif getattr(event.message, 'media', None):
+            if getattr(event.message, 'media', None):
                 media_type = type(event.message.media).__name__
                 # Ловим абсолютно любые медиа: фото, видео, документы (файлы), стикеры, WebP, альбомы
                 has_media = True
+                
+                # Дополнительная проверка на голосовые сообщения и аудио
+                if 'Voice' in media_type or 'Audio' in media_type or 'Document' in media_type:
+                    # Если это документ, проверим атрибуты, вдруг это голосовое
+                    if hasattr(event.message.media, 'document'):
+                        for attr in getattr(event.message.media.document, 'attributes', []):
+                            if type(attr).__name__ == 'DocumentAttributeAudio':
+                                is_audio = True
+                                break
+                    elif 'Voice' in media_type or 'Audio' in media_type:
+                        is_audio = True
+
         elif getattr(event, 'photo', None) or getattr(event, 'document', None) or getattr(event, 'media', None):
             has_media = True
             media_type = "DirectEventMedia"
