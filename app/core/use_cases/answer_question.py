@@ -34,11 +34,17 @@ class AnswerQuestionUseCase:
             try:
                 image_description = await self.llm.generate(vision_prompt)
                 logging.info(f"[UseCase] Описание картинки: {image_description}")
-                # Добавляем описание картинки к вопросу пользователя
-                question = f"[Пользователь прислал фото. Описание фото: {image_description}]\nТекст пользователя: {question}"
+                # Добавляем описание картинки к вопросу пользователя, даже если вопроса нет
+                if not question or question.strip() == "":
+                    question = f"[Пользователь прислал только фото. Описание фото: {image_description}]"
+                else:
+                    question = f"[Пользователь прислал фото. Описание фото: {image_description}]\nТекст пользователя: {question}"
             except Exception as e:
                 logging.error(f"[UseCase] Ошибка при распознавании картинки: {e}")
-                question = f"[Пользователь прислал фото, но я не смог его распознать]\nТекст пользователя: {question}"
+                if not question or question.strip() == "":
+                    question = "[Пользователь прислал фото, но я не смог его распознать]"
+                else:
+                    question = f"[Пользователь прислал фото, но я не смог его распознать]\nТекст пользователя: {question}"
 
         # 1. Переписываем запрос (Context Enrichment)
         if source == "wb":
