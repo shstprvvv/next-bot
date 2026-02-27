@@ -79,9 +79,9 @@ class TelegramAdapter:
                 is_audio = True
             elif getattr(event.message, 'media', None):
                 media_type = type(event.message.media).__name__
-                if 'Photo' in media_type or 'Document' in media_type:
-                    has_media = True
-        elif getattr(event, 'photo', None) or getattr(event, 'document', None):
+                # Ловим абсолютно любые медиа: фото, видео, документы (файлы), стикеры, WebP, альбомы
+                has_media = True
+        elif getattr(event, 'photo', None) or getattr(event, 'document', None) or getattr(event, 'media', None):
             has_media = True
             media_type = "DirectEventMedia"
 
