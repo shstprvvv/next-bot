@@ -134,12 +134,13 @@ class WBFeedbacksWorker:
             )
 
             # 2. Отправляем ответ
+            logger.info(f"[WBWorker-Feedbacks] Пытаюсь отправить ответ на отзыв {fb_id} в WB API...")
             success = await self.wb_client.answer_feedback(id=fb_id, text=answer)
             
             if success:
-                logger.info(f"[WBWorker-Feedbacks] Ответ на отзыв {fb_id} успешно опубликован.")
+                logger.info(f"[WBWorker-Feedbacks] ✅ УСПЕШНО! Ответ на отзыв {fb_id} опубликован в WB. Текст ответа: '{answer[:100]}...'")
             else:
-                logger.warning(f"[WBWorker-Feedbacks] Не удалось опубликовать ответ на отзыв {fb_id}.")
+                logger.error(f"[WBWorker-Feedbacks] ❌ ОШИБКА! WB API вернул False. Не удалось опубликовать ответ на отзыв {fb_id}.")
             
             await asyncio.sleep(2)
 

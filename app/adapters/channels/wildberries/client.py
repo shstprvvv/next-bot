@@ -176,18 +176,19 @@ class WBClient:
     async def answer_feedback(self, id: str, text: str) -> bool:
         """
         Отправляет ответ на отзыв.
-        POST /feedbacks/answer
+        PATCH /feedbacks
         """
         payload = {
             "id": id,
             "text": text
         }
+        logger.info(f"[WBClient] Отправка PATCH-запроса на /feedbacks для отзыва {id}. Payload: {payload}")
 
-        data = await self._request_json("POST", f"{self.BASE_URL}/feedbacks/answer", json=payload)
+        data = await self._request_json("PATCH", f"{self.BASE_URL}/feedbacks", json=payload)
         if data is None:
-            logger.error(f"[WBClient] Не удалось отправить ответ на отзыв {id}.")
+            logger.error(f"[WBClient] Не удалось отправить ответ на отзыв {id}. Data is None.")
             return False
-        logger.info(f"[WBClient] Ответ на отзыв {id} успешно отправлен.")
+        logger.info(f"[WBClient] Ответ на отзыв {id} успешно отправлен. Response data: {data}")
         return True
 
     async def send_answer(self, id: str, text: str) -> bool:
