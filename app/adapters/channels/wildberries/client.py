@@ -73,7 +73,19 @@ class WBClient:
                     continue
 
                 resp.raise_for_status()
-                data = resp.json()
+                
+                # Если 204 No Content, возвращаем пустой словарь, чтобы отличить от ошибки (None)
+                if resp.status_code == 204:
+                    await resp.aclose()
+                    return {}
+                    
+                try:
+                    data = resp.json()
+                except ValueError:
+                    # Если ответ не содержит JSON (например, пустой или текст), но status_code успешный (2xx)
+                    # то просто вернем пустой словарь или текст, чтобы не было ошибки None
+                    data = {"text_response": resp.text} if resp.text else {}
+                    
                 await resp.aclose()
                 return data
 
@@ -176,20 +188,27 @@ class WBClient:
     async def answer_feedback(self, id: str, text: str) -> bool:
         """
         Отправляет ответ на отзыв.
-        POST /api/v1/feedbacks/answer
+        PATCH /api/v1/feedbacks
         """
         payload = {
             "id": id,
             "text": text
         }
-        logger.info(f"[WBClient] Отправка PATCH-запроса на /feedbacks для отзыва {id}. Payload: {payload}")
+        logger.info(f"[WBClient] Отправка PATCH-запроса на /feedbacks/answer для отзыва {id}. Payload: {payload}")
 
-        # По документации для отзывов используется POST /api/v1/feedbacks/answer (или PATCH для редактирования)
-        # Ранее мы получали 405 Method Not Allowed на PATCH /feedbacks, так что меняем на POST /feedbacks/answer.
-        data = await self._request_json("POST", f"{self.BASE_URL}/feedbacks/answer", json=payload)
+        # Ранее мы получали 405 Method Not Allowed на PATCH /feedbacks, так что меняем на PATCH /feedbacks/answer,
+        # так как POST возвращает 405 Method Not Allowed
+        data = await self._request_json("PATCH", f"{self.BASE_URL}/feedbacks/answer", json=payload)
+        
+        # Если PATCH не работает, попробуем POST, но с правильным Content-Type (он уже задан в заголовках)
+        if data is None:
+            logger.info(f"[WBClient] PATCH-запрос не удался. Пробую POST на /feedbacks/answer для отзыва {id}.")
+            data = await self._request_json("POST", f"{self.BASE_URL}/feedbacks/answer", json=payload)
+        
         if data is None:
             logger.error(f"[WBClient] Не удалось отправить ответ на отзыв {id}. Data is None.")
             return False
+            
         logger.info(f"[WBClient] Ответ на отзыв {id} успешно отправлен. Response data: {data}")
         return True
 
