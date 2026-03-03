@@ -176,7 +176,7 @@ class WBClient:
     async def answer_feedback(self, id: str, text: str) -> bool:
         """
         Отправляет ответ на отзыв.
-        PATCH /feedbacks
+        POST /api/v1/feedbacks/answer
         """
         payload = {
             "id": id,
@@ -184,7 +184,9 @@ class WBClient:
         }
         logger.info(f"[WBClient] Отправка PATCH-запроса на /feedbacks для отзыва {id}. Payload: {payload}")
 
-        data = await self._request_json("PATCH", f"{self.BASE_URL}/feedbacks", json=payload)
+        # По документации для отзывов используется POST /api/v1/feedbacks/answer (или PATCH для редактирования)
+        # Ранее мы получали 405 Method Not Allowed на PATCH /feedbacks, так что меняем на POST /feedbacks/answer.
+        data = await self._request_json("POST", f"{self.BASE_URL}/feedbacks/answer", json=payload)
         if data is None:
             logger.error(f"[WBClient] Не удалось отправить ответ на отзыв {id}. Data is None.")
             return False
