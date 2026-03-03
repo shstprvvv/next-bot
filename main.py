@@ -17,7 +17,7 @@ from app.adapters.llm.langchain_adapter import LangChainLLMAdapter
 from app.adapters.retriever.faiss_adapter import FAISSRetrieverAdapter
 from app.adapters.channels.telegram_adapter import TelegramAdapter
 from app.adapters.channels.wildberries.client import WBClient
-from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker
+from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker, WBChatWorker
 
 # Telegram Client (старый, но рабочий)
 from app.telegram.client import create_telegram_client
@@ -96,6 +96,7 @@ async def main():
     wb_tasks: list[asyncio.Task] = []
     wb_questions_worker = None
     wb_feedbacks_worker = None
+    wb_chat_worker = None
     if wb_api_key:
         logging.info("[Main] Подключение к Wildberries...")
         wb_client = WBClient(api_key=wb_api_key)
@@ -119,9 +120,17 @@ async def main():
             ignore_older_than_days=30 # Проверяем отзывы за последние 30 дней
         )
         
+        # Воркер чатов
+        wb_chat_worker = WBChatWorker(
+            wb_client=wb_client,
+            use_case=answer_use_case,
+            check_interval=check_interval
+        )
+        
         # Запускаем как фоновые задачи
         wb_tasks.append(asyncio.create_task(wb_questions_worker.start(), name="wb_questions_worker"))
         wb_tasks.append(asyncio.create_task(wb_feedbacks_worker.start(), name="wb_feedbacks_worker"))
+        wb_tasks.append(asyncio.create_task(wb_chat_worker.start(), name="wb_chat_worker"))
     else:
         logging.warning("[Main] WB_API_KEY не найден. Модуль Wildberries отключен.")
 
@@ -157,6 +166,8 @@ async def main():
             wb_questions_worker.stop()
         if wb_feedbacks_worker is not None:
             wb_feedbacks_worker.stop()
+        if wb_chat_worker is not None:
+            wb_chat_worker.stop()
 
         for t in wb_tasks:
             t.cancel()

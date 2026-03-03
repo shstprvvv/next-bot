@@ -47,7 +47,7 @@ class AnswerQuestionUseCase:
                     question = f"[Пользователь прислал фото, но я не смог его распознать]\nТекст пользователя: {question}"
 
         # 1. Переписываем запрос (Context Enrichment)
-        if source == "wb":
+        if source.startswith("wb"):
             reformulate_prompt = f"""Ты — умный маршрутизатор запросов в техподдержке. 
 Мы продаем Смарт ТВ приставки на Wildberries. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами. Все вопросы касаются только настройки, подключения и работы ТВ-приставки.
 
@@ -113,6 +113,7 @@ class AnswerQuestionUseCase:
         logging.info("[UseCase] Генерирую ответ через LLM...")
         try:
             answer = await self.llm.generate(prompt)
+            logging.info(f"[UseCase] Сгенерированный ответ: {answer.strip()}")
             return answer.strip()
         except Exception as e:
             logging.error(f"[UseCase] Ошибка LLM: {e}", exc_info=True)

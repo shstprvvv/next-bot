@@ -197,3 +197,60 @@ class WBClient:
         """
         logger.warning("[WBClient] Deprecated method send_answer called. Using answer_feedback as fallback.")
         return await self.answer_feedback(id, text)
+
+    # --- Chat API ---
+
+    async def get_chat_events(self, next_token: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """
+        Получает события чатов (инкрементально).
+        GET /api/v1/seller/events
+        """
+        url = "https://buyer-chat-api.wildberries.ru/api/v1/seller/events"
+        params = {}
+        if next_token is not None:
+            params["next"] = next_token
+        
+        data = await self._request_json("GET", url, params=params)
+        return data
+
+    async def send_chat_message(self, chat_id: str, text: str, reply_sign: str) -> bool:
+        """
+        Отправляет сообщение в чат с покупателем.
+        """
+        url = "https://buyer-chat-api.wildberries.ru/api/v1/seller/message"
+        
+        # По документации ожидается multipart/form-data. Но мы можем отправить и JSON.
+        # Формируем тело так, чтобы покрыть возможные варианты API.
+        payload = {
+            "chatId": chat_id,
+            "chatID": chat_id,
+            "text": text,
+            "message": text,
+            "replySign": reply_sign
+        }
+        
+        data = await self._request_json("POST", url, json=payload)
+        
+        if data is None:
+            logger.error(f"[WBClient] Не удалось отправить сообщение в чат {chat_id}.")
+            return False
+            
+        logger.info(f"[WBClient] Сообщение в чат {chat_id} успешно отправлено.")
+        return True
+
+    async def download_chat_file(self, download_id: str) -> Optional[bytes]:
+        """
+        Скачивает файл (например, картинку) из чата по downloadID.
+        """
+        url = f"https://buyer-chat-api.wildberries.ru/api/v1/seller/download/{download_id}"
+        
+        client = self._get_client()
+        try:
+            resp = await client.request("GET", url, headers=self.headers)
+            if resp.status_code == 200:
+                return resp.content
+            logger.error(f"[WBClient] Ошибка скачивания файла {download_id}: {resp.status_code}")
+        except Exception as e:
+            logger.error(f"[WBClient] Исключение при скачивании файла {download_id}: {e}", exc_info=True)
+            
+        return None
