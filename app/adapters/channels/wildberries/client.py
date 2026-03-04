@@ -116,7 +116,7 @@ class WBClient:
             logger.error(f"[WBClient] Запрос завершился ошибкой: {last_exc}", exc_info=True)
         return None
 
-    async def get_unanswered_questions(self, take: int = 10, skip: int = 0, date_from: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    async def get_unanswered_questions(self, take: int = 5000, skip: int = 0, date_from: Optional[datetime] = None) -> List[Dict[str, Any]]:
         """
         Получает список неотвеченных вопросов.
         GET /questions?isAnswered=false
@@ -141,7 +141,7 @@ class WBClient:
             logger.info(f"[WBClient] Получено {len(questions)} вопросов (с {date_from if date_from else 'начала времен'}).")
         return questions
 
-    async def get_unanswered_feedbacks(self, take: int = 10, skip: int = 0, date_from: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    async def get_unanswered_feedbacks(self, take: int = 5000, skip: int = 0, date_from: Optional[datetime] = None) -> List[Dict[str, Any]]:
         """
         Получает список неотвеченных отзывов.
         GET /feedbacks?isAnswered=false
