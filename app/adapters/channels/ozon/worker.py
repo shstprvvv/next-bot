@@ -18,8 +18,8 @@ class OzonQuestionsWorker:
         self.check_interval = check_interval
         self.is_running = False
         
-        # Фильтр по дате: обрабатываем вопросы только с 6 марта 2026 года (чтобы не трогать старые)
-        self.min_date = datetime(2026, 3, 6)
+        # Фильтр по дате: обрабатываем вопросы только с 1 марта 2026 года
+        self.min_date = datetime(2026, 3, 1)
 
     async def start(self):
         self.is_running = True
@@ -34,9 +34,11 @@ class OzonQuestionsWorker:
             await asyncio.sleep(self.check_interval)
 
     async def process_new_questions(self):
+        logger.info("[OzonWorker-Questions] Отправляю запрос к API Ozon за новыми вопросами...")
         questions = await self.ozon_client.get_unanswered_questions()
         
         if not questions:
+            logger.info("[OzonWorker-Questions] API Ozon вернул пустой список новых вопросов.")
             return
             
         processed_count = 0
