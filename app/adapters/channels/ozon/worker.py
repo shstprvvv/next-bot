@@ -18,8 +18,8 @@ class OzonQuestionsWorker:
         self.check_interval = check_interval
         self.is_running = False
         
-        # Фильтр по дате: обрабатываем вопросы только с 1 января 2026 года
-        self.min_date = datetime(2026, 1, 1)
+        # Фильтр по дате: обрабатываем вопросы только с 6 марта 2026 года (чтобы не трогать старые)
+        self.min_date = datetime(2026, 3, 6)
 
     async def start(self):
         self.is_running = True
