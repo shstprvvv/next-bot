@@ -27,16 +27,8 @@ from app.telegram.client import create_telegram_client
 
 
 def _validate_config(cfg: dict) -> None:
-    missing = []
-    for key in ["TELETHON_API_ID", "TELETHON_API_HASH"]:
-        if not cfg.get(key):
-            missing.append(key)
-
-    if missing:
-        raise RuntimeError(f"Missing required env/config keys: {', '.join(missing)}")
-
-    if not cfg.get("TELETHON_PHONE"):
-        logging.warning("[Main] TELETHON_PHONE не задан. Если сессия Telegram ещё не авторизована, старт может потребовать телефон.")
+    # Telegram keys are now optional. If they are missing, Telegram will just be disabled.
+    pass
 
 async def main():
     # 0. Загрузка переменных окружения (для локального запуска)
@@ -165,22 +157,29 @@ async def main():
         logging.warning("[Main] OZON_CLIENT_ID или OZON_API_KEY не найдены. Модуль Ozon отключен.")
 
     # --- Telegram ---
-    logging.info("[Main] Подключение к Telegram...")
+    telethon_client = None
+    telethon_api_id = cfg.get("TELETHON_API_ID")
+    telethon_api_hash = cfg.get("TELETHON_API_HASH")
     
-    telethon_client = create_telegram_client(
-        session_name=os.getenv('TELETHON_SESSION_NAME', 'sessions/user_session'),
-        api_id=cfg.get("TELETHON_API_ID"),
-        api_hash=cfg.get("TELETHON_API_HASH")
-    )
+    if telethon_api_id and telethon_api_hash:
+        logging.info("[Main] Подключение к Telegram...")
+        
+        telethon_client = create_telegram_client(
+            session_name=os.getenv('TELETHON_SESSION_NAME', 'sessions/user_session'),
+            api_id=telethon_api_id,
+            api_hash=telethon_api_hash
+        )
+        
+        # Подключаем наш адаптер к клиенту
+        telegram_adapter = TelegramAdapter(
+            client=telethon_client,
+            use_case=answer_use_case,
+            message_delay=cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS", 2)
+        )
+    else:
+        logging.warning("[Main] Ключи Telegram (TELETHON_API_ID/HASH) не найдены. Telegram отключен.")
     
-    # Подключаем наш адаптер к клиенту
-    telegram_adapter = TelegramAdapter(
-        client=telethon_client,
-        use_case=answer_use_case,
-        message_delay=cfg.get("TELEGRAM_MESSAGE_DELAY_SECONDS", 2)
-    )
-    
-    # 6. Запуск Telegram (блокирующий вызов в конце)
+    # 6. Запуск Telegram (если включен) или вечный цикл для воркеров
     phone = cfg.get("TELETHON_PHONE")
     password = cfg.get("TELEGRAM_PASSWORD")
     
@@ -205,10 +204,11 @@ async def main():
         for t in wb_tasks + ozon_tasks:
             t.cancel()
 
-        try:
-            await telethon_client.disconnect()
-        except Exception:
-            logging.warning("[Main] Ошибка при отключении Telegram клиента.", exc_info=True)
+        if telethon_client is not None:
+            try:
+                await telethon_client.disconnect()
+            except Exception:
+                logging.warning("[Main] Ошибка при отключении Telegram клиента.", exc_info=True)
 
         if wb_client is not None:
             try:
@@ -223,26 +223,32 @@ async def main():
             # например, при некоторых окружениях signal handlers не поддерживаются
             pass
 
-    backoff_s = 3
-    logging.info(f"[Main] Старт клиента Telegram (phone={phone})...")
-    while not stop_event.is_set():
-        try:
-            await telethon_client.start(phone=phone, password=password)
-            logging.info("[Main] Бот запущен и готов к работе!")
-            await telethon_client.run_until_disconnected()
+    if telethon_client is not None:
+        backoff_s = 3
+        logging.info(f"[Main] Старт клиента Telegram (phone={phone})...")
+        while not stop_event.is_set():
+            try:
+                await telethon_client.start(phone=phone, password=password)
+                logging.info("[Main] Бот запущен и готов к работе!")
+                await telethon_client.run_until_disconnected()
 
-            if stop_event.is_set():
+                if stop_event.is_set():
+                    break
+
+                logging.warning(f"[Main] Telegram отключился. Переподключение через {backoff_s} сек...")
+                await asyncio.sleep(backoff_s)
+                backoff_s = min(60, backoff_s * 2)
+            except asyncio.CancelledError:
                 break
-
-            logging.warning(f"[Main] Telegram отключился. Переподключение через {backoff_s} сек...")
-            await asyncio.sleep(backoff_s)
-            backoff_s = min(60, backoff_s * 2)
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logging.error(f"[Main] Ошибка Telegram цикла: {e}", exc_info=True)
-            await asyncio.sleep(backoff_s)
-            backoff_s = min(60, backoff_s * 2)
+            except Exception as e:
+                logging.error(f"[Main] Ошибка Telegram цикла: {e}", exc_info=True)
+                await asyncio.sleep(backoff_s)
+                backoff_s = min(60, backoff_s * 2)
+    else:
+        # Если Telegram отключен, просто держим основной цикл, пока работают воркеры Ozon и WB
+        logging.info("[Main] Telegram отключен. Бот запущен только с воркерами маркетплейсов.")
+        while not stop_event.is_set():
+            await asyncio.sleep(1)
 
     await shutdown()
 
