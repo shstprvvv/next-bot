@@ -17,6 +17,9 @@ def load_config():
         "WB_CHECK_INTERVAL_SECONDS": int(os.getenv("WB_CHECK_INTERVAL_SECONDS", 300)),
         "WB_CHAT_DEBUG": os.getenv("WB_CHAT_DEBUG", "false").lower() in ('true', '1', 't'),
         "TELEGRAM_MESSAGE_DELAY_SECONDS": int(os.getenv("TELEGRAM_MESSAGE_DELAY_SECONDS", 2)),
+        "OZON_CLIENT_ID": os.getenv("OZON_CLIENT_ID"),
+        "OZON_API_KEY": os.getenv("OZON_API_KEY"),
+        "OZON_CHECK_INTERVAL_SECONDS": int(os.getenv("OZON_CHECK_INTERVAL_SECONDS", 300)),
     }
 
 
