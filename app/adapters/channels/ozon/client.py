@@ -22,7 +22,10 @@ class OzonClient:
     async def _make_request(self, method: str, endpoint: str, json_data: dict = None) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}{endpoint}"
         try:
-            async with aiohttp.ClientSession() as session:
+            # Отключаем проверку SSL сертификата (verify_ssl=False), так как на некоторых 
+            # машинах Python (особенно на Mac) может не иметь корневых сертификатов Минцифры
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.request(method, url, headers=self.headers, json=json_data) as response:
                     if response.status in (200, 201):
                         return await response.json()
