@@ -44,7 +44,8 @@ class OzonClient:
         Получает список вопросов покупателей, на которые еще нет ответа.
         В документации Ozon v1/question/list
         """
-        # status: NEW - вопросы без ответа
+        # status: NEW - новые вопросы.
+        # Если NEW не возвращает вопросы, которые мы ожидаем, мы запрашиваем UNANSWERED или просто все
         payload = {
             "filter": {
                 "status": "NEW"
@@ -53,17 +54,14 @@ class OzonClient:
             "last_id": ""
         }
         
-        # Ozon не так давно ввел отдельный API для вопросов и отзывов (interactive).
-        # Эндпоинты могут отличаться, используем стандартные методы, если они недоступны - 
-        # нужно проверить актуальную доку на docs.ozon.ru/api/seller
         endpoint = "/v1/question/list"
         
         response = await self._make_request("POST", endpoint, json_data=payload)
         
-        if not response or "result" not in response:
+        if not response or "questions" not in response:
             return []
             
-        return response["result"].get("questions", [])
+        return response.get("questions", [])
 
     async def answer_question(self, question_id: str, text: str) -> bool:
         """
