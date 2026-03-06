@@ -52,7 +52,7 @@ class OzonQuestionsWorker:
             q_id = q.get("id") or q.get("question_id")
             q_text = q.get("text", "")
             product_name = q.get("product_name", q.get("sku", "Неизвестный товар"))
-            created_at_str = q.get("created_at") or q.get("date")
+            created_at_str = q.get("created_at") or q.get("date") or q.get("published_at")
             
             if not q_id or not q_text:
                 continue
