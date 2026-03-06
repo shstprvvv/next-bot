@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Optional
 from datetime import datetime
+from dateutil import parser
 from app.adapters.channels.ozon.client import OzonClient
 from app.core.use_cases.answer_question import AnswerQuestionUseCase
 from app.adapters.db.database_adapter import DatabaseAdapter
@@ -16,10 +17,13 @@ class OzonQuestionsWorker:
         self.db_adapter = db_adapter
         self.check_interval = check_interval
         self.is_running = False
+        
+        # Фильтр по дате: обрабатываем вопросы только с 1 января 2026 года
+        self.min_date = datetime(2026, 1, 1)
 
     async def start(self):
         self.is_running = True
-        logger.info("[OzonWorker-Questions] Запуск фоновой проверки вопросов Ozon...")
+        logger.info(f"[OzonWorker-Questions] Запуск фоновой проверки вопросов Ozon (фильтр даты с {self.min_date.date()})...")
         
         while self.is_running:
             try:
@@ -34,13 +38,34 @@ class OzonQuestionsWorker:
         
         if not questions:
             return
+            
+        processed_count = 0
+        max_batch_size = 3 # Берем в работу не больше 3 вопросов за один цикл
 
         for q in questions:
+            if processed_count >= max_batch_size:
+                logger.info(f"[OzonWorker-Questions] Достигнут лимит обработки в {max_batch_size} вопроса за цикл. Остальные будут обработаны в следующем цикле.")
+                break
+
             q_id = q.get("id") or q.get("question_id")
             q_text = q.get("text", "")
             product_name = q.get("product_name", q.get("sku", "Неизвестный товар"))
+            created_at_str = q.get("created_at") or q.get("date")
             
             if not q_id or not q_text:
+                continue
+                
+            # Проверка даты создания вопроса
+            if created_at_str:
+                try:
+                    created_dt = parser.parse(created_at_str).replace(tzinfo=None)
+                    if created_dt < self.min_date:
+                        logger.debug(f"[OzonWorker-Questions] Пропуск вопроса {q_id} (создан {created_dt.date()} < {self.min_date.date()})")
+                        continue
+                except Exception as e:
+                    logger.warning(f"[OzonWorker-Questions] Ошибка парсинга даты '{created_at_str}' для вопроса {q_id}: {e}")
+            else:
+                logger.warning(f"[OzonWorker-Questions] У вопроса {q_id} нет даты создания, пропускаем (чтобы не ответить на старые).")
                 continue
                 
             q_id = str(q_id)
@@ -50,6 +75,8 @@ class OzonQuestionsWorker:
             existing_msg = self.db_adapter.get_message(db_id)
             if existing_msg and existing_msg.status in ("processing", "answered"):
                 continue
+                
+            processed_count += 1
                 
             # Создаем или обновляем запись в БД
             message_record = MarketplaceMessage(
