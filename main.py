@@ -18,6 +18,9 @@ from app.adapters.retriever.faiss_adapter import FAISSRetrieverAdapter
 from app.adapters.channels.telegram_adapter import TelegramAdapter
 from app.adapters.channels.wildberries.client import WBClient
 from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker, WBChatWorker
+from app.adapters.channels.ozon.client import OzonClient
+from app.adapters.channels.ozon.worker import OzonQuestionsWorker
+from app.adapters.db.database_adapter import DatabaseAdapter
 
 # Telegram Client (старый, но рабочий)
 from app.telegram.client import create_telegram_client
@@ -77,6 +80,9 @@ async def main():
         openai_api_base=cfg.get("OPENAI_API_BASE")
     )
     
+    # Database
+    db_adapter = DatabaseAdapter(db_path="smart_bot.db")
+    
     # 4. Инициализация Use Cases (Application Layer)
     logging.info("[Main] Сборка Use Cases...")
     answer_use_case = AnswerQuestionUseCase(
@@ -134,6 +140,30 @@ async def main():
     else:
         logging.warning("[Main] WB_API_KEY не найден. Модуль Wildberries отключен.")
 
+    # --- Ozon ---
+    ozon_client_id = cfg.get("OZON_CLIENT_ID")
+    ozon_api_key = cfg.get("OZON_API_KEY")
+    ozon_client = None
+    ozon_tasks: list[asyncio.Task] = []
+    ozon_questions_worker = None
+    
+    if ozon_client_id and ozon_api_key:
+        logging.info("[Main] Подключение к Ozon...")
+        ozon_client = OzonClient(client_id=ozon_client_id, api_key=ozon_api_key)
+        
+        check_interval = int(cfg.get("OZON_CHECK_INTERVAL_SECONDS", 300))
+        
+        ozon_questions_worker = OzonQuestionsWorker(
+            ozon_client=ozon_client,
+            use_case=answer_use_case,
+            db_adapter=db_adapter,
+            check_interval=check_interval
+        )
+        
+        ozon_tasks.append(asyncio.create_task(ozon_questions_worker.start(), name="ozon_questions_worker"))
+    else:
+        logging.warning("[Main] OZON_CLIENT_ID или OZON_API_KEY не найдены. Модуль Ozon отключен.")
+
     # --- Telegram ---
     logging.info("[Main] Подключение к Telegram...")
     
@@ -169,7 +199,10 @@ async def main():
         if wb_chat_worker is not None:
             wb_chat_worker.stop()
 
-        for t in wb_tasks:
+        if ozon_questions_worker is not None:
+            ozon_questions_worker.stop()
+
+        for t in wb_tasks + ozon_tasks:
             t.cancel()
 
         try:
