@@ -51,7 +51,8 @@ class OzonQuestionsWorker:
 
             q_id = q.get("id") or q.get("question_id")
             q_text = q.get("text", "")
-            product_name = q.get("product_name", q.get("sku", "Неизвестный товар"))
+            sku = q.get("sku")
+            product_name = q.get("product_name", sku if sku else "Неизвестный товар")
             created_at_str = q.get("created_at") or q.get("date") or q.get("published_at")
             
             if not q_id or not q_text:
@@ -106,7 +107,7 @@ class OzonQuestionsWorker:
                 )
 
                 # 2. Отправляем ответ в Ozon
-                success = await self.ozon_client.answer_question(question_id=q_id, text=answer)
+                success = await self.ozon_client.answer_question(question_id=q_id, text=answer, sku=sku)
                 
                 if success:
                     logger.info(f"[OzonWorker-Questions] Ответ на вопрос {q_id} успешно опубликован.")

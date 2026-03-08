@@ -81,9 +81,29 @@ class WBChatWorker:
         self.use_case = use_case
         self.check_interval = check_interval
         self.is_running = False
-        # Для инкрементального получения событий
-        self.next_token: Optional[int] = None
+        # Для инкрементального получения событий (сохраняем в файл, чтобы не терять при перезапуске)
+        self.token_file = "wb_chat_next_token.txt"
+        self.next_token: Optional[int] = self._load_token()
         self.chat_history = {} # История диалогов в памяти
+
+    def _load_token(self) -> Optional[int]:
+        try:
+            import os
+            if os.path.exists(self.token_file):
+                with open(self.token_file, "r") as f:
+                    val = f.read().strip()
+                    if val:
+                        return int(val)
+        except Exception as e:
+            logger.error(f"[WBWorker-Chat] Ошибка загрузки токена: {e}")
+        return None
+
+    def _save_token(self, token: int):
+        try:
+            with open(self.token_file, "w") as f:
+                f.write(str(token))
+        except Exception as e:
+            logger.error(f"[WBWorker-Chat] Ошибка сохранения токена: {e}")
 
     async def start(self):
         self.is_running = True
@@ -109,97 +129,111 @@ class WBChatWorker:
         
         # Обновляем next_token для следующего запроса
         if "next" in result:
-            self.next_token = result["next"]
+            new_token = result["next"]
+            self.next_token = new_token
+            self._save_token(new_token)
 
         for event in events:
-            # Нас интересуют только входящие сообщения от клиентов
-            if event.get("eventType") != "message" or event.get("sender") != "client":
-                continue
-
-            chat_id = event.get("chatID")
-            reply_sign = event.get("replySign")
-            message_data = event.get("message", {})
-            text = message_data.get("text", "")
-            
-            # Извлекаем картинки, если есть
-            images = message_data.get("attachments", {}).get("images", [])
-            image_base64 = None
-            
-            if not chat_id or not reply_sign:
-                continue
+            try:
+                # Нас интересуют только входящие сообщения от клиентов
+                event_type = str(event.get("eventType", "")).lower()
+                sender = str(event.get("sender", "")).lower()
                 
-            if not text and not images:
-                # Ни текста, ни картинок
-                continue
+                if event_type != "message":
+                    continue
+                    
+                # Разрешаем "client", "buyer", "customer" на случай изменений в API
+                if sender not in ["client", "buyer", "customer"]:
+                    continue
 
-            logger.info(f"[WBWorker-Chat] Новое сообщение в чате {chat_id}: текст='{text}', картинок={len(images)}")
-            
-            if images:
-                # Берем первую картинку для распознавания
-                img_info = images[0]
-                download_id = img_info.get("downloadID")
-                if download_id:
-                    logger.info(f"[WBWorker-Chat] Скачиваю картинку {download_id}...")
-                    img_bytes = await self.wb_client.download_chat_file(download_id)
-                    if img_bytes:
-                        image_base64 = base64.b64encode(img_bytes).decode('utf-8')
-                        logger.info(f"[WBWorker-Chat] Картинка успешно скачана и переведена в base64.")
+                chat_id = event.get("chatID") or event.get("chatId")
+                reply_sign = event.get("replySign")
+                message_data = event.get("message", {})
+                text = message_data.get("text", "")
+                
+                # Извлекаем картинки, если есть
+                images = message_data.get("attachments", {}).get("images", [])
+                image_base64 = None
+                
+                if not chat_id:
+                    logger.warning(f"[WBWorker-Chat] Пропуск: нет chat_id в событии: {event}")
+                    continue
+                    
+                if not reply_sign:
+                    logger.warning(f"[WBWorker-Chat] Пропуск: нет reply_sign для чата {chat_id}. Это может быть системное сообщение или ошибка WB API.")
+                    continue
+                    
+                if not text and not images:
+                    # Ни текста, ни картинок
+                    continue
 
-            # Если пришла только картинка без текста, и мы не смогли её скачать
-            if not text and not image_base64:
-                logger.warning(f"[WBWorker-Chat] Итоговое сообщение от {chat_id} оказалось пустым (не удалось скачать медиа).")
-                await self.wb_client.send_chat_message(
-                    chat_id=chat_id, 
-                    text="Вижу ваш файл/сообщение! К сожалению, я пока могу отвечать только на текст. Опишите, пожалуйста, проблему словами, и я постараюсь помочь.", 
-                    reply_sign=reply_sign
+                logger.info(f"[WBWorker-Chat] Новое сообщение в чате {chat_id}: текст='{text}', картинок={len(images)}")
+                
+                if images:
+                    # Берем первую картинку для распознавания
+                    img_info = images[0]
+                    download_id = img_info.get("downloadID")
+                    if download_id:
+                        logger.info(f"[WBWorker-Chat] Скачиваю картинку {download_id}...")
+                        img_bytes = await self.wb_client.download_chat_file(download_id)
+                        if img_bytes:
+                            image_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                            logger.info(f"[WBWorker-Chat] Картинка успешно скачана и переведена в base64.")
+
+                # Если пришла только картинка без текста, и мы не смогли её скачать
+                if not text and not image_base64:
+                    logger.warning(f"[WBWorker-Chat] Итоговое сообщение от {chat_id} оказалось пустым (не удалось скачать медиа).")
+                    await self.wb_client.send_chat_message(
+                        chat_id=chat_id, 
+                        text="Вижу ваш файл! К сожалению, я пока могу отвечать только на текст. Опишите, пожалуйста, проблему словами.", 
+                        reply_sign=reply_sign
+                    )
+                    continue
+
+                # Инициализируем историю для чата, если её нет
+                if chat_id not in self.chat_history:
+                    self.chat_history[chat_id] = []
+
+                # 1. Получаем ответ от нейросети
+                answer = await self.use_case.execute(
+                    user_id=f"wb_chat_{chat_id}", 
+                    question=text, 
+                    history=self.chat_history[chat_id], 
+                    source="wb_chat",
+                    image_base64=image_base64
                 )
-                continue
 
-            # Инициализируем историю для чата, если её нет
-            if chat_id not in self.chat_history:
-                self.chat_history[chat_id] = []
-
-            # 1. Получаем ответ от нейросети
-            # Передаем историю диалога, как в Telegram
-            answer = await self.use_case.execute(
-                user_id=f"wb_chat_{chat_id}", 
-                question=text, 
-                history=self.chat_history[chat_id], 
-                source="wb_chat",
-                image_base64=image_base64
-            )
-
-            # ЗАГЛУШКА НА ГЛУПЫЕ ОТВЕТЫ (аналогично Telegram)
-            stop_phrases = [
-                "нет готового решения", 
-                "к сожалению, у меня нет",
-                "изучим проблему более детально",
-                "я всего лишь",
-                "я искусственный интеллект",
-                "я языковая модель"
-            ]
-            
-            if any(phrase in answer.lower() for phrase in stop_phrases):
-                logger.warning(f"[WBWorker-Chat] Сработала заглушка стоп-слов! Исходный ответ бота: {answer}")
-                answer = "Уточните, пожалуйста, на каком этапе возникает проблема? Какие индикаторы горят на самой приставке? Что именно пишет на экране телевизора?"
-
-            # 2. Отправляем ответ в WB
-            success = await self.wb_client.send_chat_message(chat_id=chat_id, text=answer, reply_sign=reply_sign)
-            
-            if success:
-                logger.info(f"[WBWorker-Chat] Ответ в чат {chat_id} успешно отправлен.")
-                # Сохраняем в историю текущий шаг
-                self.chat_history[chat_id].append(f"Клиент: {text}")
-                self.chat_history[chat_id].append(f"Бот: {answer}")
+                # ЗАГЛУШКА НА ГЛУПЫЕ ОТВЕТЫ
+                stop_phrases = [
+                    "нет готового решения", 
+                    "к сожалению, у меня нет",
+                    "изучим проблему более детально",
+                    "я всего лишь",
+                    "я искусственный интеллект",
+                    "я языковая модель"
+                ]
                 
-                # Ограничиваем историю (например, 20 сообщений)
-                if len(self.chat_history[chat_id]) > 20:
-                    self.chat_history[chat_id] = self.chat_history[chat_id][-20:]
-            else:
-                logger.warning(f"[WBWorker-Chat] Не удалось отправить ответ в чат {chat_id}.")
-            
-            # Небольшая пауза между ответами
-            await asyncio.sleep(2)
+                if any(phrase in answer.lower() for phrase in stop_phrases):
+                    logger.warning(f"[WBWorker-Chat] Сработала заглушка стоп-слов! Исходный ответ: {answer}")
+                    answer = "Уточните, пожалуйста, на каком этапе возникает проблема? Какие индикаторы горят на самой приставке? Что именно пишет на экране телевизора?"
+
+                # 2. Отправляем ответ в WB
+                success = await self.wb_client.send_chat_message(chat_id=chat_id, text=answer, reply_sign=reply_sign)
+                
+                if success:
+                    logger.info(f"[WBWorker-Chat] Ответ в чат {chat_id} успешно отправлен.")
+                    self.chat_history[chat_id].append(f"Клиент: {text}")
+                    self.chat_history[chat_id].append(f"Бот: {answer}")
+                    
+                    if len(self.chat_history[chat_id]) > 20:
+                        self.chat_history[chat_id] = self.chat_history[chat_id][-20:]
+                else:
+                    logger.warning(f"[WBWorker-Chat] Не удалось отправить ответ в чат {chat_id}.")
+                
+                await asyncio.sleep(2)
+                
+            except Exception as e:
+                logger.error(f"[WBWorker-Chat] Ошибка при обработке события чата: {e}", exc_info=True)
 
     def stop(self):
         self.is_running = False
@@ -239,7 +273,18 @@ class WBFeedbacksWorker:
 
         for fb in feedbacks:
             fb_id = fb.get("id")
-            fb_text = fb.get("text", "")
+            
+            # В Wildberries текст отзыва может быть разбит на 3 поля: text (комментарий), pros (плюсы), cons (минусы)
+            text_parts = []
+            if fb.get("text"):
+                text_parts.append(f"Комментарий: {fb.get('text')}")
+            if fb.get("pros"):
+                text_parts.append(f"Плюсы: {fb.get('pros')}")
+            if fb.get("cons"):
+                text_parts.append(f"Минусы: {fb.get('cons')}")
+                
+            fb_text = "\n".join(text_parts).strip()
+            
             valuation = fb.get("productValuation", 5) # По умолчанию 5, если не указано
             product_name = fb.get("productDetails", {}).get("productName", "")
             
@@ -251,7 +296,7 @@ class WBFeedbacksWorker:
                 logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: 5 звезд).")
                 continue
                 
-            if not fb_text or fb_text.strip() == "":
+            if not fb_text:
                 logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: {valuation}, но нет текста).")
                 continue
             

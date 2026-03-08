@@ -20,6 +20,7 @@ from app.adapters.channels.wildberries.client import WBClient
 from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker, WBChatWorker
 from app.adapters.channels.ozon.client import OzonClient
 from app.adapters.channels.ozon.worker import OzonQuestionsWorker
+from app.adapters.channels.ozon.reviews_worker import OzonReviewsWorker
 from app.adapters.db.database_adapter import DatabaseAdapter
 
 # Telegram Client (старый, но рабочий)
@@ -122,7 +123,7 @@ async def main():
         wb_chat_worker = WBChatWorker(
             wb_client=wb_client,
             use_case=answer_use_case,
-            check_interval=check_interval
+            check_interval=int(cfg.get("WB_CHAT_POLLING_INTERVAL_SECONDS", 15))
         )
         
         # Запускаем как фоновые задачи
@@ -152,7 +153,15 @@ async def main():
             check_interval=check_interval
         )
         
+        ozon_reviews_worker = OzonReviewsWorker(
+            ozon_client=ozon_client,
+            use_case=answer_use_case,
+            db_adapter=db_adapter,
+            check_interval=check_interval
+        )
+        
         ozon_tasks.append(asyncio.create_task(ozon_questions_worker.start(), name="ozon_questions_worker"))
+        ozon_tasks.append(asyncio.create_task(ozon_reviews_worker.start(), name="ozon_reviews_worker"))
     else:
         logging.warning("[Main] OZON_CLIENT_ID или OZON_API_KEY не найдены. Модуль Ozon отключен.")
 
@@ -200,6 +209,8 @@ async def main():
 
         if ozon_questions_worker is not None:
             ozon_questions_worker.stop()
+        if ozon_reviews_worker is not None:
+            ozon_reviews_worker.stop()
 
         for t in wb_tasks + ozon_tasks:
             t.cancel()

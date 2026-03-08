@@ -38,6 +38,48 @@ class OzonClient:
             return None
 
     # --- ВОПРОСЫ (Q&A) ---
+    # --- ОТЗЫВЫ (Reviews) ---
+
+    async def get_unanswered_reviews(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Получает список отзывов покупателей, на которые еще нет ответа.
+        В документации Ozon v1/review/list
+        """
+        payload = {
+            "with_interaction_status": [
+                "UNVIEWED",
+                "UNANSWERED"
+            ],
+            "limit": min(limit, 100), # Максимум 100 по документации
+            "sort_dir": "DESC"
+        }
+        
+        endpoint = "/v1/review/list"
+        
+        response = await self._make_request("POST", endpoint, json_data=payload)
+        
+        if not response or "reviews" not in response:
+            return []
+            
+        return response.get("reviews", [])
+
+    async def answer_review(self, review_id: str, text: str) -> bool:
+        """
+        Отвечает на отзыв покупателя.
+        Используется эндпоинт v1/review/comment/create
+        """
+        payload = {
+            "review_id": review_id,
+            "text": text
+        }
+            
+        endpoint = "/v1/review/comment/create"
+        
+        response = await self._make_request("POST", endpoint, json_data=payload)
+        
+        if response is not None and "comment_id" in response:
+            return True
+        return False
     
     async def get_unanswered_questions(self, limit: int = 100) -> List[Dict[str, Any]]:
         """
@@ -63,7 +105,7 @@ class OzonClient:
             
         return response.get("questions", [])
 
-    async def answer_question(self, question_id: str, text: str) -> bool:
+    async def answer_question(self, question_id: str, text: str, sku: int = None) -> bool:
         """
         Отвечает на вопрос покупателя.
         """
@@ -71,7 +113,10 @@ class OzonClient:
             "question_id": question_id,
             "text": text
         }
-        endpoint = "/v1/question/answer"
+        if sku is not None:
+            payload["sku"] = sku
+            
+        endpoint = "/v1/question/answer/create"
         
         response = await self._make_request("POST", endpoint, json_data=payload)
         
