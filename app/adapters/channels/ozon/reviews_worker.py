@@ -4,14 +4,14 @@ from typing import Optional
 from datetime import datetime
 from dateutil import parser
 from app.adapters.channels.ozon.client import OzonClient
-from app.core.use_cases.answer_question import AnswerQuestionUseCase
+from app.core.use_cases.reply_to_feedback import ReplyToFeedbackUseCase
 from app.adapters.db.database_adapter import DatabaseAdapter
 from app.core.domain.models.marketplace_message import MarketplaceMessage
 
 logger = logging.getLogger(__name__)
 
 class OzonReviewsWorker:
-    def __init__(self, ozon_client: OzonClient, use_case: AnswerQuestionUseCase, db_adapter: DatabaseAdapter, check_interval: int = 300):
+    def __init__(self, ozon_client: OzonClient, use_case: ReplyToFeedbackUseCase, db_adapter: DatabaseAdapter, check_interval: int = 300):
         self.ozon_client = ozon_client
         self.use_case = use_case
         self.db_adapter = db_adapter
@@ -79,6 +79,15 @@ class OzonReviewsWorker:
             existing_msg = self.db_adapter.get_message(db_id)
             if existing_msg and existing_msg.status in ("processing", "answered"):
                 continue
+
+            # Фильтрация отзывов: пропускаем 5 звезд или пустые отзывы
+            if r_rating == 5:
+                logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Оценка: 5 звезд).")
+                continue
+                
+            if not r_text.strip():
+                logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Оценка: {r_rating}, но нет текста).")
+                continue
                 
             processed_count += 1
                 
@@ -95,16 +104,14 @@ class OzonReviewsWorker:
             )
             self.db_adapter.save_message(message_record)
 
-            full_query = f"Отзыв ({r_rating} звезд) по товару '{product_name}': {r_text if r_text else '[без текста]'}"
-            logger.info(f"[OzonWorker-Reviews] Обработка отзыва {r_id}: {full_query}")
+            logger.info(f"[OzonWorker-Reviews] Обработка отзыва {r_id} (Оценка: {r_rating}): {r_text}")
 
             try:
-                # 1. Получаем ответ от нейросети
+                # 1. Получаем ответ от нейросети, используя специализированный юзкейс для отзывов
                 answer = await self.use_case.execute(
-                    user_id=db_id, 
-                    question=full_query, 
-                    history=[], 
-                    source="ozon_review"
+                    review_text=r_text, 
+                    valuation=r_rating, 
+                    product_name=product_name
                 )
 
                 # 2. Отправляем ответ в Ozon

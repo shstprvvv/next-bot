@@ -155,7 +155,7 @@ async def main():
         
         ozon_reviews_worker = OzonReviewsWorker(
             ozon_client=ozon_client,
-            use_case=answer_use_case,
+            use_case=feedback_use_case,
             db_adapter=db_adapter,
             check_interval=check_interval
         )
