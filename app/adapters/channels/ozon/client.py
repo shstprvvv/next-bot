@@ -37,7 +37,86 @@ class OzonClient:
             logger.error(f"[OzonClient] Исключение при запросе {endpoint}: {e}")
             return None
 
-    # --- ВОПРОСЫ (Q&A) ---
+    # --- ЧАТЫ (Chats) ---
+
+    async def get_unanswered_chats(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Получает список чатов с непрочитанными сообщениями от покупателей.
+        Используется эндпоинт v3/chat/list
+        """
+        payload = {
+            "filter": {"chat_status": "Opened"},
+            "limit": limit,
+            "offset": 0
+        }
+        
+        endpoint = "/v3/chat/list"
+        
+        response = await self._make_request("POST", endpoint, json_data=payload)
+        
+        if not response or "chats" not in response:
+            return []
+            
+        chats = response.get("chats", [])
+        # Фильтруем только чаты с покупателями, где есть непрочитанные сообщения
+        unanswered_chats = [
+            chat for chat in chats 
+            if chat.get("unread_count", 0) > 0 and chat.get("chat", {}).get("chat_type") == "BUYER_SELLER"
+        ]
+        
+        return unanswered_chats
+
+    async def get_chat_history(self, chat_id: str, limit: int = 50) -> Optional[Dict[str, Any]]:
+        """
+        Получает историю сообщений в чате.
+        Используется эндпоинт v3/chat/history
+        """
+        payload = {
+            "chat_id": chat_id,
+            "limit": limit,
+            "direction": "Backward"
+        }
+        
+        endpoint = "/v3/chat/history"
+        
+        return await self._make_request("POST", endpoint, json_data=payload)
+
+    async def send_chat_message(self, chat_id: str, text: str) -> bool:
+        """
+        Отправляет сообщение в чат покупателю.
+        Используется эндпоинт v1/chat/send/message
+        """
+        payload = {
+            "chat_id": chat_id,
+            "text": text
+        }
+        
+        endpoint = "/v1/chat/send/message"
+        
+        response = await self._make_request("POST", endpoint, json_data=payload)
+        
+        # Обычно успешный ответ возвращает строку (message_id) или объект
+        if response is not None:
+            return True
+        return False
+
+    async def mark_chat_read(self, chat_id: str, message_id: str) -> bool:
+        """
+        Помечает сообщения в чате как прочитанные до указанного message_id включительно.
+        Используется эндпоинт v2/chat/read
+        """
+        payload = {
+            "chat_id": chat_id,
+            "from_message_id": str(message_id)
+        }
+        
+        endpoint = "/v2/chat/read"
+        
+        response = await self._make_request("POST", endpoint, json_data=payload)
+        
+        if response is not None:
+            return True
+        return False
     # --- ОТЗЫВЫ (Reviews) ---
 
     async def get_unanswered_reviews(self, limit: int = 100) -> List[Dict[str, Any]]:
