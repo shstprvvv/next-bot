@@ -74,7 +74,7 @@ async def main():
     )
     
     # Database
-    db_adapter = DatabaseAdapter(db_path="smart_bot.db")
+    db_adapter = DatabaseAdapter(db_path="sessions/smart_bot.db")
     
     # 4. Инициализация Use Cases (Application Layer)
     logging.info("[Main] Сборка Use Cases...")

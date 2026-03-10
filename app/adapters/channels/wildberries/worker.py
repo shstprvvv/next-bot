@@ -82,7 +82,7 @@ class WBChatWorker:
         self.check_interval = check_interval
         self.is_running = False
         # Для инкрементального получения событий (сохраняем в файл, чтобы не терять при перезапуске)
-        self.token_file = "wb_chat_next_token.txt"
+        self.token_file = "sessions/wb_chat_next_token.txt"
         self.next_token: Optional[int] = self._load_token()
         self.chat_history = {} # История диалогов в памяти
 
@@ -105,9 +105,40 @@ class WBChatWorker:
         except Exception as e:
             logger.error(f"[WBWorker-Chat] Ошибка сохранения токена: {e}")
 
+    async def _fast_forward(self):
+        logger.info("[WBWorker-Chat] Инициализация: перемотка старых событий (это может занять несколько секунд)...")
+        while True:
+            try:
+                data = await self.wb_client.get_chat_events(next_token=self.next_token)
+                if not data or "result" not in data:
+                    break
+                    
+                result = data["result"]
+                events = result.get("events", [])
+                
+                if "next" in result and result["next"] != self.next_token:
+                    self.next_token = result["next"]
+                    self._save_token(self.next_token)
+                    if events:
+                        logger.info(f"[WBWorker-Chat] Перемотка: пропущено {len(events)} событий. Токен: {self.next_token}")
+                else:
+                    break
+                    
+                if not events:
+                    break
+                
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.error(f"[WBWorker-Chat] Ошибка при перемотке: {e}")
+                break
+        logger.info(f"[WBWorker-Chat] Перемотка завершена. Актуальный токен: {self.next_token}")
+
     async def start(self):
         self.is_running = True
         logger.info("[WBWorker-Chat] Запуск фоновой проверки чатов Wildberries...")
+        
+        if self.next_token is None:
+            await self._fast_forward()
         
         while self.is_running:
             try:
