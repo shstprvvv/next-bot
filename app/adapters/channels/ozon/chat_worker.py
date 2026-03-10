@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.adapters.channels.ozon.client import OzonClient
-from app.adapters.database.sqlite_adapter import DatabaseAdapter
+from app.adapters.db.database_adapter import DatabaseAdapter
 from app.core.entities.message import MarketplaceMessage
 from app.core.use_cases.answer_question import AnswerQuestionUseCase
 
