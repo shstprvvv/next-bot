@@ -114,7 +114,7 @@ class OzonChatWorker:
             try:
                 # Используем AnswerQuestionUseCase, так как он подходит для чатов
                 # Убираем context, так как AnswerQuestionUseCase.execute принимает только text
-                answer_text = await self.answer_use_case.execute(msg_text)
+                answer_text = await self.answer_use_case.execute(question=msg_text)
                 
                 if answer_text:
                     # Отправляем ответ
