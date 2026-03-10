@@ -89,6 +89,24 @@ class OzonReviewsWorker:
                 logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Оценка: {r_rating}, но нет текста).")
                 continue
                 
+            comments_amount = r.get("comments_amount", 0)
+            if comments_amount > 0:
+                logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Уже есть {comments_amount} комментариев/ответов).")
+                # Обновляем статус в БД, чтобы больше не проверять
+                if not existing_msg:
+                    message_record = MarketplaceMessage(
+                        id=db_id,
+                        marketplace="ozon",
+                        message_type="review",
+                        item_id=r_id,
+                        product_name=str(product_name),
+                        text=r_text,
+                        status="answered",
+                        created_at=datetime.now()
+                    )
+                    self.db_adapter.save_message(message_record)
+                continue
+                
             processed_count += 1
                 
             # Создаем или обновляем запись в БД

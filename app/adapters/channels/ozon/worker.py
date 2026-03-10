@@ -79,6 +79,23 @@ class OzonQuestionsWorker:
             if existing_msg and existing_msg.status in ("processing", "answered"):
                 continue
                 
+            answers_count = q.get("answers_count", 0)
+            if answers_count > 0:
+                logger.info(f"[OzonWorker-Questions] Пропуск вопроса {q_id} (Уже есть {answers_count} ответов).")
+                if not existing_msg:
+                    message_record = MarketplaceMessage(
+                        id=db_id,
+                        marketplace="ozon",
+                        message_type="question",
+                        item_id=q_id,
+                        product_name=product_name,
+                        text=q_text,
+                        status="answered",
+                        created_at=datetime.now()
+                    )
+                    self.db_adapter.save_message(message_record)
+                continue
+                
             processed_count += 1
                 
             # Создаем или обновляем запись в БД
