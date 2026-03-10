@@ -113,7 +113,8 @@ class OzonChatWorker:
             # Генерируем ответ
             try:
                 # Используем AnswerQuestionUseCase, так как он подходит для чатов
-                answer_text = await self.answer_use_case.execute(msg_text, context=f"Заказ: {order_number}")
+                # Убираем context, так как AnswerQuestionUseCase.execute принимает только text
+                answer_text = await self.answer_use_case.execute(msg_text)
                 
                 if answer_text:
                     # Отправляем ответ
