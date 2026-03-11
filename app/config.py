@@ -20,6 +20,9 @@ def load_config():
         "OZON_CLIENT_ID": os.getenv("OZON_CLIENT_ID"),
         "OZON_API_KEY": os.getenv("OZON_API_KEY"),
         "OZON_CHECK_INTERVAL_SECONDS": int(os.getenv("OZON_CHECK_INTERVAL_SECONDS", 300)),
+        "LANGFUSE_PUBLIC_KEY": os.getenv("LANGFUSE_PUBLIC_KEY"),
+        "LANGFUSE_SECRET_KEY": os.getenv("LANGFUSE_SECRET_KEY"),
+        "LANGFUSE_HOST": os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
     }
 
 

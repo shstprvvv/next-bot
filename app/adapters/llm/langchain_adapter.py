@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 from app.core.ports.llm import LLMClient
 from app.utils.retry import RetryPolicy, async_retry
 from openai import AsyncOpenAI
+from langfuse.callback import CallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,15 @@ class LangChainLLMAdapter(LLMClient):
             max_retries=0,
         )
         
+        # Инициализация Langfuse CallbackHandler (если есть ключи в окружении)
+        self.langfuse_handler = None
+        if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+            self.langfuse_handler = CallbackHandler(
+                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+            )
+        
         self._retry_policy = RetryPolicy(
             max_attempts=max(1, max_retries + 1),
             base_delay_s=float(os.getenv("LLM_RETRY_BASE_DELAY_SECONDS", "0.75")),
@@ -42,12 +52,14 @@ class LangChainLLMAdapter(LLMClient):
 
     async def generate(self, prompt: Union[str, List[Dict[str, Any]]]) -> str:
         async def _call():
+            callbacks = [self.langfuse_handler] if self.langfuse_handler else None
+            
             # Если пришел список (например, с картинкой), оборачиваем в HumanMessage
             if isinstance(prompt, list):
                 messages = [HumanMessage(content=prompt)]
-                return await self.client.ainvoke(messages)
+                return await self.client.ainvoke(messages, config={"callbacks": callbacks})
             # Иначе просто отправляем строку
-            return await self.client.ainvoke(prompt)
+            return await self.client.ainvoke(prompt, config={"callbacks": callbacks})
 
         try:
             response = await async_retry(
