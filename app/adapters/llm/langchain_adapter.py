@@ -36,11 +36,9 @@ class LangChainLLMAdapter(LLMClient):
         # Инициализация Langfuse CallbackHandler (если есть ключи в окружении)
         self.langfuse_handler = None
         if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
-            self.langfuse_handler = CallbackHandler(
-                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-                host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
-            )
+            # Для langfuse.langchain.CallbackHandler ключи берутся автоматически из переменных окружения
+            # (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST)
+            self.langfuse_handler = CallbackHandler()
         
         self._retry_policy = RetryPolicy(
             max_attempts=max(1, max_retries + 1),
