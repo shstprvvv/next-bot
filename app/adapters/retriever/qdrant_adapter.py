@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from typing import List, Optional
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
@@ -8,6 +9,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.ports.retriever import KnowledgeRetriever
 from app.core.models.chunk import RetrievedChunk
@@ -21,12 +23,13 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
         self.openai_api_key = openai_api_key
         self.openai_api_base = openai_api_base
         
-        # Получаем URL Qdrant из окружения (по умолчанию локальный Docker)
-        # Внутри docker-compose сеть называется по имени сервиса, то есть 'qdrant'
-        qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
-        self.client = QdrantClient(url=qdrant_url)
+        # Получаем URL Qdrant из окружения. Внутри Docker-сети это будет http://qdrant:6333
+        self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
         
         self.embeddings = self._get_embeddings()
+        
+        # Инициализируем клиент с ретраями на случай, если контейнер Qdrant еще поднимается
+        self.client = self._connect_with_retry()
         self.vector_store = self._init_collection_and_store()
 
     def _get_embeddings(self):
@@ -49,6 +52,20 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
             base_url=self.openai_api_base
         )
 
+    # Декоратор tenacity: пытаемся подключиться до 7 раз, с экспоненциальной задержкой (от 2 до 10 секунд)
+    @retry(
+        stop=stop_after_attempt(7),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        reraise=True
+    )
+    def _connect_with_retry(self) -> QdrantClient:
+        logger.info(f"[QdrantAdapter] Попытка подключения к Qdrant по адресу {self.qdrant_url}...")
+        client = QdrantClient(url=self.qdrant_url, timeout=10.0)
+        # Делаем тестовый запрос, чтобы убедиться, что база реально отвечает
+        client.get_collections()
+        logger.info("[QdrantAdapter] Успешное подключение к Qdrant!")
+        return client
+
     def _init_collection_and_store(self):
         # Проверяем, существует ли коллекция
         collections = self.client.get_collections().collections
@@ -65,7 +82,7 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
             
-            # Загружаем данные
+            # Загружаем данные из текущего knowledge_base.md
             self._rebuild_index()
         else:
             logger.info(f"[QdrantAdapter] Подключение к существующей коллекции {self.collection_name}.")
@@ -101,7 +118,7 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
             QdrantVectorStore.from_documents(
                 docs,
                 self.embeddings,
-                url=os.getenv("QDRANT_URL", "http://qdrant:6333"),
+                url=self.qdrant_url,
                 collection_name=self.collection_name,
                 force_recreate=True # Пересоздаем коллекцию при ребилде
             )

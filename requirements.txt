@@ -5,7 +5,9 @@ langchain-community==0.3.27
 langchain-openai==0.3.28
 langchain-text-splitters==0.3.8
 openai>=1.86.0
-faiss-cpu==1.11.0.post1
+qdrant-client>=1.16.1
+langchain-qdrant>=0.2.1
+tenacity>=8.5.0
 requests==2.32.3
 unstructured[md]==0.16.1
 tiktoken==0.8.0

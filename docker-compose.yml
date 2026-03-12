@@ -1,13 +1,30 @@
 version: '3.8'
 
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   bot:
     build: .
     container_name: smart-bot
     restart: always
+    depends_on:
+      qdrant:
+        condition: service_healthy
     volumes:
       - ./sessions:/app/sessions
-      - ./faiss_index:/app/faiss_index
       - ./knowledge_base.md:/app/knowledge_base.md
       - ./terminals:/app/terminals # Для логов, если нужно
     env_file:
