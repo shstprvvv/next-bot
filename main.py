@@ -14,7 +14,7 @@ from app.core.use_cases.reply_to_feedback import ReplyToFeedbackUseCase
 
 # Adapters
 from app.adapters.llm.langchain_adapter import LangChainLLMAdapter
-from app.adapters.retriever.qdrant_adapter import QdrantRetrieverAdapter
+from app.adapters.retriever.faiss_adapter import FAISSRetrieverAdapter
 from app.adapters.channels.telegram_adapter import TelegramAdapter
 from app.adapters.channels.wildberries.client import WBClient
 from app.adapters.channels.wildberries.worker import WBQuestionsWorker, WBFeedbacksWorker, WBChatWorker
@@ -66,9 +66,9 @@ async def main():
         temperature=0.0
     )
     
-    # Retriever (Qdrant)
-    retriever_adapter = QdrantRetrieverAdapter(
-        collection_name="next_bot_knowledge",
+    # Retriever (FAISS)
+    retriever_adapter = FAISSRetrieverAdapter(
+        index_path="faiss_index",
         knowledge_base_path="knowledge_base.md",
         openai_api_key=cfg.get("OPENAI_API_KEY"),
         openai_api_base=cfg.get("OPENAI_API_BASE")
