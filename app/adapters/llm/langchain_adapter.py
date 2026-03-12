@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 from app.core.ports.llm import LLMClient
 from app.utils.retry import RetryPolicy, async_retry
 from openai import AsyncOpenAI
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 
 logger = logging.getLogger(__name__)
 
