@@ -22,7 +22,8 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
         self.openai_api_base = openai_api_base
         
         # Получаем URL Qdrant из окружения (по умолчанию локальный Docker)
-        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        # Внутри docker-compose сеть называется по имени сервиса, то есть 'qdrant'
+        qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
         self.client = QdrantClient(url=qdrant_url)
         
         self.embeddings = self._get_embeddings()
@@ -100,7 +101,7 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
             QdrantVectorStore.from_documents(
                 docs,
                 self.embeddings,
-                url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+                url=os.getenv("QDRANT_URL", "http://qdrant:6333"),
                 collection_name=self.collection_name,
                 force_recreate=True # Пересоздаем коллекцию при ребилде
             )
