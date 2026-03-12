@@ -12,6 +12,8 @@ services:
       - ./terminals:/app/terminals # Для логов, если нужно
     env_file:
       - .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
     command: python3 main.py
     depends_on:
       - qdrant
