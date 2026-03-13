@@ -10,7 +10,7 @@ class AnswerQuestionUseCase:
     llm: LLMClient
     retriever: KnowledgeRetriever
     
-    async def execute(self, user_id: Union[int, str], question: str, history: Optional[List[str]] = None, source: str = "telegram", image_base64: Optional[str] = None) -> str:
+    async def execute(self, user_id: Union[int, str], question: str, history: Optional[List[str]] = None, source: str = "telegram", image_base64: Optional[str] = None, brand_context: Optional[str] = None) -> str:
         """
         Главный сценарий:
         1. Распознавание картинки и переписывание запроса в поисковый (схлопнуто в 1 запрос для скорости).
@@ -26,15 +26,15 @@ class AnswerQuestionUseCase:
 
         # 1. Распознавание картинки и переписывание запроса (Context Enrichment)
         
-        # Базовые инструкции для маршрутизатора в зависимости от источника
-        if source.startswith("wb"):
-            router_context = "Мы продаем Смарт ТВ приставки на Wildberries. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами. Все вопросы касаются только настройки, подключения и работы ТВ-приставки."
-        elif source == "ozon_question":
-            router_context = "Мы продаем Смарт ТВ приставки на Ozon. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами. Все вопросы касаются только настройки, подключения и работы ТВ-приставки."
-        elif source == "ozon_review":
-            router_context = "Мы продаем Смарт ТВ приставки на Ozon. Клиент оставил отзыв. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами. Если в отзыве есть вопрос или жалоба, они касаются только настройки, подключения и работы ТВ-приставки."
+        # Динамический контекст для маршрутизатора
+        if brand_context:
+            router_context = brand_context
+        elif source.startswith("wb"):
+            router_context = "Мы продаем товары на Wildberries. ВАЖНО: Отвечай только по технической части товара."
+        elif source.startswith("ozon"):
+            router_context = "Мы продаем товары на Ozon. ВАЖНО: Отвечай только по технической части товара."
         else:
-            router_context = "Мы полностью поддерживаем Смарт ТВ приставки NEXT и приложение с ТВ-каналами NEXT TV."
+            router_context = "Мы оказываем поддержку пользователям нашей продукции."
 
         logging.info(f"[UseCase] Исходный вопрос: {question}")
 
