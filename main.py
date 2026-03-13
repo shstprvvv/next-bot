@@ -80,6 +80,10 @@ async def main():
     # Отладочный лог сырой переменной (без вывода ключей)
     extra_raw = os.getenv("EXTRA_CLIENTS_JSON")
     logging.info(f"[Main] Сырая переменная EXTRA_CLIENTS_JSON: {bool(extra_raw)} (длина: {len(extra_raw) if extra_raw else 0})")
+    
+    # Дополнительный лог для проверки всех переменных окружения (безопасно)
+    keys_in_env = [k for k in os.environ.keys() if "CLIENT" in k or "WB" in k or "OZON" in k]
+    logging.info(f"[Main] Ключи в env: {keys_in_env}")
 
     for client in clients_cfg:
         client_id = client["id"]
