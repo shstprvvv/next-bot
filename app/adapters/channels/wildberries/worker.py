@@ -100,6 +100,9 @@ class WBChatWorker:
 
     def _save_token(self, token: int):
         try:
+            # Создаем директорию, если её нет
+            import os
+            os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
             with open(self.token_file, "w") as f:
                 f.write(str(token))
         except Exception as e:
@@ -107,10 +110,15 @@ class WBChatWorker:
 
     async def _fast_forward(self):
         logger.info("[WBWorker-Chat] Инициализация: перемотка старых событий (это может занять несколько секунд)...")
-        while True:
+        # Ограничиваем количество итераций перемотки, чтобы не зависнуть навсегда
+        max_fast_forward_iterations = 50
+        iteration = 0
+        while iteration < max_fast_forward_iterations:
+            iteration += 1
             try:
                 data = await self.wb_client.get_chat_events(next_token=self.next_token)
                 if not data or "result" not in data:
+                    logger.warning(f"[WBWorker-Chat] Перемотка: некорректный ответ от API: {data}")
                     break
                     
                 result = data["result"]
@@ -122,12 +130,13 @@ class WBChatWorker:
                     if events:
                         logger.info(f"[WBWorker-Chat] Перемотка: пропущено {len(events)} событий. Токен: {self.next_token}")
                 else:
+                    logger.info("[WBWorker-Chat] Перемотка: новых событий больше нет.")
                     break
                     
                 if not events:
                     break
                 
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2) # Уменьшаем задержку для быстрой перемотки
             except Exception as e:
                 logger.error(f"[WBWorker-Chat] Ошибка при перемотке: {e}")
                 break
@@ -150,19 +159,31 @@ class WBChatWorker:
 
     async def process_new_messages(self):
         # Получаем события чатов
+        logger.info(f"[WBWorker-Chat] Проверка новых сообщений (токен: {self.next_token})")
         data = await self.wb_client.get_chat_events(next_token=self.next_token)
         
-        if not data or "result" not in data:
+        if not data:
+            logger.debug("[WBWorker-Chat] Нет данных от API чатов.")
+            return
+            
+        if "result" not in data:
+            logger.warning(f"[WBWorker-Chat] Некорректный ответ API (нет 'result'): {data}")
             return
 
         result = data["result"]
         events = result.get("events", [])
         
+        # Логируем количество полученных событий, если они есть
+        if events:
+            logger.info(f"[WBWorker-Chat] Получено событий: {len(events)}")
+        
         # Обновляем next_token для следующего запроса
         if "next" in result:
             new_token = result["next"]
-            self.next_token = new_token
-            self._save_token(new_token)
+            if new_token != self.next_token:
+                self.next_token = new_token
+                self._save_token(new_token)
+                logger.debug(f"[WBWorker-Chat] Токен обновлен: {new_token}")
 
         for event in events:
             try:
@@ -174,7 +195,9 @@ class WBChatWorker:
                     continue
                     
                 # Разрешаем "client", "buyer", "customer" на случай изменений в API
-                if sender not in ["client", "buyer", "customer"]:
+                # ВАЖНО: Если sender отсутствует, это тоже может быть клиент
+                if sender and sender not in ["client", "buyer", "customer"]:
+                    logger.debug(f"[WBWorker-Chat] Пропуск: отправитель {sender} не является клиентом.")
                     continue
 
                 chat_id = event.get("chatID") or event.get("chatId")

@@ -240,20 +240,20 @@ class WBClient:
         """
         url = "https://buyer-chat-api.wildberries.ru/api/v1/seller/message"
         
-        # По документации ожидается multipart/form-data. Но мы можем отправить и JSON.
-        # Формируем тело так, чтобы покрыть возможные варианты API.
+        # По документации ожидается multipart/form-data.
+        # Но httpx может отправить JSON. Если WB строго требует multipart, 
+        # то JSON может не сработать.
         payload = {
             "chatId": chat_id,
-            "chatID": chat_id,
             "text": text,
-            "message": text,
             "replySign": reply_sign
         }
         
+        logger.info(f"[WBClient] Отправка сообщения в чат {chat_id}. Текст: {text[:50]}...")
         data = await self._request_json("POST", url, json=payload)
         
         if data is None:
-            logger.error(f"[WBClient] Не удалось отправить сообщение в чат {chat_id}.")
+            logger.error(f"[WBClient] Не удалось отправить сообщение в чат {chat_id}. Ответ API: {data}")
             return False
             
         logger.info(f"[WBClient] Сообщение в чат {chat_id} успешно отправлено.")

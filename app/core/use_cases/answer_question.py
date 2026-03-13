@@ -1,3 +1,4 @@
+from typing import Union, List, Optional
 from dataclasses import dataclass
 from app.core.ports.llm import LLMClient
 from app.core.ports.retriever import KnowledgeRetriever
@@ -9,7 +10,7 @@ class AnswerQuestionUseCase:
     llm: LLMClient
     retriever: KnowledgeRetriever
     
-    async def execute(self, user_id: int | str, question: str, history: list[str] = None, source: str = "telegram", image_base64: str = None) -> str:
+    async def execute(self, user_id: Union[int, str], question: str, history: Optional[List[str]] = None, source: str = "telegram", image_base64: Optional[str] = None) -> str:
         """
         Главный сценарий:
         1. Распознавание картинки и переписывание запроса в поисковый (схлопнуто в 1 запрос для скорости).
