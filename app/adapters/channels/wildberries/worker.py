@@ -345,14 +345,15 @@ class WBFeedbacksWorker:
             if not fb_id:
                 continue
             
-            # НОВАЯ ЛОГИКА: Пропускаем отзывы с оценкой 5 звезд или отзывы без текста
-            if valuation == 5:
-                logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: 5 звезд).")
-                continue
+            # НОВАЯ ЛОГИКА: Больше не пропускаем 5-звездочные отзывы, чтобы благодарить клиентов!
+            # Пропускаем только отзывы вообще без текста, если не хотим отвечать пустышкам (по желанию можно убрать и этот фильтр)
+            if not fb_text and valuation < 5:
+                # Если текст пустой и оценка ниже 5 - возможно стоит ответить шаблоном, но пока пропускаем
+                pass
                 
-            if not fb_text:
-                logger.info(f"[WBWorker-Feedbacks] Пропуск отзыва {fb_id} (Оценка: {valuation}, но нет текста).")
-                continue
+            if not fb_text and valuation == 5:
+                # На пустые 5 звезд можно отвечать коротким "Спасибо!" - отправим на обработку промпту
+                logger.info(f"[WBWorker-Feedbacks] Пустой отзыв {fb_id} (Оценка: 5 звезд). Передаем нейросети для благодарности.")
             
             logger.info(f"[WBWorker-Feedbacks] Обработка отзыва {fb_id} (Оценка: {valuation}): {fb_text}")
 

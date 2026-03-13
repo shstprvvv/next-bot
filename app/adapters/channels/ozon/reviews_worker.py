@@ -80,14 +80,14 @@ class OzonReviewsWorker:
             if existing_msg and existing_msg.status in ("processing", "answered"):
                 continue
 
-            # Фильтрация отзывов: пропускаем 5 звезд или пустые отзывы
-            if r_rating == 5:
-                logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Оценка: 5 звезд).")
-                continue
-                
-            if not r_text.strip():
+            # Фильтрация отзывов: пропускаем только пустые отзывы (если не хотим отвечать на пустые 5 звезд)
+            # Если нужно благодарить за пустые 5 звезд - можно убрать и этот фильтр, 
+            # но пока оставим пропуск только пустых отзывов ниже 5 звезд.
+            if not r_text.strip() and r_rating < 5:
                 logger.info(f"[OzonWorker-Reviews] Пропуск отзыва {r_id} (Оценка: {r_rating}, но нет текста).")
                 continue
+            elif not r_text.strip() and r_rating == 5:
+                logger.info(f"[OzonWorker-Reviews] Пустой отзыв {r_id} (Оценка: 5 звезд). Передаем нейросети для благодарности.")
                 
             comments_amount = r.get("comments_amount", 0)
             if comments_amount > 0:
