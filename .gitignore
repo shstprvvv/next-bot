@@ -33,4 +33,5 @@ dist/
 *.log
 
 # Misc
-*.swp  Python
+*.swp  Pythonqdrant_data/
+sessions/
