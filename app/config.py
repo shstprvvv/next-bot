@@ -20,8 +20,12 @@ def load_config():
         "telegram_enabled": bool(os.getenv("TELETHON_API_ID") and os.getenv("TELETHON_API_HASH"))
     }
     
-    if next_client["wb_api_key"] or (next_client["ozon_client_id"] and next_client["ozon_api_key"]):
-        clients.append(next_client)
+    if next_client["wb_api_key"] or (next_client["ozon_client_id"] and next_client["ozon_api_key"]) or not os.getenv("EXTRA_CLIENTS_JSON"):
+        # Если есть ключи базового или если вообще нет других клиентов (на всякий случай добавляем дефолтного)
+        if not next_client["wb_api_key"] and not next_client["ozon_client_id"] and os.getenv("EXTRA_CLIENTS_JSON"):
+            pass # Если ключей нет, но есть EXTRA, то базового не добавляем (он пустой)
+        else:
+            clients.append(next_client)
         
     # Возможность загрузить дополнительных клиентов через JSON
     import json
