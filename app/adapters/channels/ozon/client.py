@@ -1,5 +1,6 @@
 import logging
 import aiohttp
+import asyncio
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -19,23 +20,41 @@ class OzonClient:
             "Content-Type": "application/json"
         }
 
-    async def _make_request(self, method: str, endpoint: str, json_data: dict = None) -> Optional[Dict[str, Any]]:
+    async def _make_request(self, method: str, endpoint: str, json_data: dict = None, max_retries: int = 3) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}{endpoint}"
-        try:
-            # Отключаем проверку SSL сертификата (verify_ssl=False), так как на некоторых 
-            # машинах Python (особенно на Mac) может не иметь корневых сертификатов Минцифры
-            connector = aiohttp.TCPConnector(ssl=False)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.request(method, url, headers=self.headers, json=json_data) as response:
-                    if response.status in (200, 201):
-                        return await response.json()
-                    else:
-                        text = await response.text()
-                        logger.error(f"[OzonClient] Ошибка API {response.status} на {endpoint}: {text}")
-                        return None
-        except Exception as e:
-            logger.error(f"[OzonClient] Исключение при запросе {endpoint}: {e}")
-            return None
+        
+        # Exponential backoff parameters
+        base_delay = 2.0
+        
+        for attempt in range(max_retries):
+            try:
+                # Отключаем проверку SSL сертификата (verify_ssl=False)
+                connector = aiohttp.TCPConnector(ssl=False)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    async with session.request(method, url, headers=self.headers, json=json_data) as response:
+                        if response.status in (200, 201):
+                            return await response.json()
+                        elif response.status in (429, 500, 502, 503, 504):
+                            text = await response.text()
+                            delay = base_delay * (2 ** attempt)
+                            logger.warning(f"[OzonClient] Временная ошибка {response.status} на {endpoint}. Попытка {attempt + 1}/{max_retries}. Ждем {delay} сек. Текст: {text}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(delay)
+                                continue
+                            return None
+                        else:
+                            text = await response.text()
+                            logger.error(f"[OzonClient] Ошибка API {response.status} на {endpoint}: {text}")
+                            return None
+            except Exception as e:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"[OzonClient] Исключение при запросе {endpoint}: {e}. Попытка {attempt + 1}/{max_retries}. Ждем {delay} сек.")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(delay)
+                    continue
+                return None
+                
+        return None
 
     # --- ЧАТЫ (Chats) ---
 

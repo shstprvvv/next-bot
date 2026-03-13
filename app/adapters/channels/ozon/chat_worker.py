@@ -88,6 +88,27 @@ class OzonChatWorker:
             customer_messages.reverse()
             msg_text = "\n".join(customer_messages)
             
+            # Собираем историю для контекста (до 10 последних сообщений)
+            chat_context = []
+            for msg in reversed(messages): # От старых к новым
+                user_type = msg.get("user", {}).get("type")
+                data = msg.get("data", [])
+                if data:
+                    text = data[-1] if isinstance(data, list) else str(data)
+                    prefix = "Клиент: " if user_type == "Customer" else "Бот: "
+                    chat_context.append(f"{prefix}{text}")
+            
+            # Оставляем только последние 10 сообщений в истории (исключая новые, которые еще не отвечены)
+            # В данном случае customer_messages - это новые. Мы не хотим их дублировать, если они уже есть в chat_context.
+            # На самом деле, лучше просто передать chat_context без последних непрочитанных сообщений.
+            
+            # Подсчитываем, сколько непрочитанных сообщений в конце
+            unread_count_in_context = len(customer_messages)
+            if unread_count_in_context > 0:
+                history_for_llm = chat_context[:-unread_count_in_context][-10:]
+            else:
+                history_for_llm = chat_context[-10:]
+            
             # Проверяем, обрабатывали ли мы это сообщение (по ID последнего сообщения)
             db_id = f"ozon_chat_{chat_id}_{last_msg_id}"
             existing_msg = self.db_adapter.get_message(db_id)
@@ -113,10 +134,11 @@ class OzonChatWorker:
             # Генерируем ответ
             try:
                 # Используем AnswerQuestionUseCase, так как он подходит для чатов
-                # Передаем user_id (chat_id) и question
+                # Передаем user_id (chat_id), question и history
                 answer_text = await self.answer_use_case.execute(
                     user_id=chat_id, 
                     question=msg_text,
+                    history=history_for_llm,
                     source="ozon_chat"
                 )
                 

@@ -83,8 +83,28 @@ class WBChatWorker:
         self.is_running = False
         # Для инкрементального получения событий (сохраняем в файл, чтобы не терять при перезапуске)
         self.token_file = "sessions/wb_chat_next_token.txt"
+        self.history_file = "sessions/wb_chat_history.json"
         self.next_token: Optional[int] = self._load_token()
-        self.chat_history = {} # История диалогов в памяти
+        self.chat_history = self._load_chat_history()
+
+    def _load_chat_history(self) -> dict:
+        try:
+            import os, json
+            if os.path.exists(self.history_file):
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"[WBWorker-Chat] Ошибка загрузки истории чатов: {e}")
+        return {}
+
+    def _save_chat_history(self):
+        try:
+            import os, json
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            with open(self.history_file, "w", encoding="utf-8") as f:
+                json.dump(self.chat_history, f, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WBWorker-Chat] Ошибка сохранения истории чатов: {e}")
 
     def _load_token(self) -> Optional[int]:
         try:
@@ -281,6 +301,8 @@ class WBChatWorker:
                     
                     if len(self.chat_history[chat_id]) > 20:
                         self.chat_history[chat_id] = self.chat_history[chat_id][-20:]
+                        
+                    self._save_chat_history()
                 else:
                     logger.warning(f"[WBWorker-Chat] Не удалось отправить ответ в чат {chat_id}.")
                 
