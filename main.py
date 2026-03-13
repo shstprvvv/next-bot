@@ -73,9 +73,13 @@ async def main():
     all_tasks = []
     all_clients = [] # Для Telegram
 
-    # 4. Итерация по клиентам и инициализация их воркеров
+    # Итерация по клиентам и инициализация их воркеров
     clients_cfg = cfg.get("CLIENTS", [])
     logging.info(f"[Main] Найдено конфигураций клиентов: {len(clients_cfg)}")
+    
+    # Отладочный лог сырой переменной (без вывода ключей)
+    extra_raw = os.getenv("EXTRA_CLIENTS_JSON")
+    logging.info(f"[Main] Сырая переменная EXTRA_CLIENTS_JSON: {bool(extra_raw)} (длина: {len(extra_raw) if extra_raw else 0})")
 
     for client in clients_cfg:
         client_id = client["id"]
