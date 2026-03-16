@@ -25,21 +25,39 @@ WB_CHAT_AUTH_SCHEME = os.getenv("WB_CHAT_AUTH_SCHEME", "Bearer").strip()
 
 
 def _headers_feedbacks() -> Dict[str, str]:
+    # Гарантируем, что ключ содержит только ASCII символы для httpx
+    safe_api_key = "".join(c for c in str(WB_API_KEY) if ord(c) < 128)
+    safe_api_key = safe_api_key.strip().replace('\n', '').replace('\r', '')
+    
+    if not safe_api_key:
+        safe_api_key = "invalid_key_was_cyrillic"
+        
+    final_key = safe_api_key.encode("ascii", errors="ignore").decode("ascii")
+    
     return {
-        'Authorization': f'Bearer {WB_API_KEY}',
+        'Authorization': f'Bearer {final_key}',
         'Content-Type': 'application/json'
     }
 
 
 def _headers_chat() -> Dict[str, str]:
+    # Гарантируем, что ключ содержит только ASCII символы для httpx
+    safe_api_key = "".join(c for c in str(WB_API_KEY) if ord(c) < 128)
+    safe_api_key = safe_api_key.strip().replace('\n', '').replace('\r', '')
+    
+    if not safe_api_key:
+        safe_api_key = "invalid_key_was_cyrillic"
+        
+    final_key = safe_api_key.encode("ascii", errors="ignore").decode("ascii")
+    
     if WB_CHAT_AUTH_SCHEME.lower() == 'raw':
         return {
-            'Authorization': f'{WB_API_KEY}',
+            'Authorization': f'{final_key}',
             'Content-Type': 'application/json'
         }
     # default: Bearer
     return {
-        'Authorization': f'Bearer {WB_API_KEY}',
+        'Authorization': f'Bearer {final_key}',
         'Content-Type': 'application/json'
     }
 
