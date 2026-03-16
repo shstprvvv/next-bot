@@ -53,6 +53,18 @@ def load_config():
                 if "wb_api_key" in client and client["wb_api_key"]:
                     # Оставляем только ASCII символы в ключе
                     client["wb_api_key"] = "".join(c for c in client["wb_api_key"] if ord(c) < 128)
+                    if not client["wb_api_key"]:
+                        client["wb_api_key"] = "invalid_key_was_cyrillic"
+                
+                if "ozon_api_key" in client and client["ozon_api_key"]:
+                    client["ozon_api_key"] = "".join(c for c in client["ozon_api_key"] if ord(c) < 128)
+                    if not client["ozon_api_key"]:
+                        client["ozon_api_key"] = "invalid_key_was_cyrillic"
+                        
+                if "ozon_client_id" in client and client["ozon_client_id"]:
+                    client["ozon_client_id"] = "".join(c for c in str(client["ozon_client_id"]) if ord(c) < 128)
+                    if not client["ozon_client_id"]:
+                        client["ozon_client_id"] = "invalid_id_was_cyrillic"
             
             clients.extend(extra_clients)
         except Exception as e:
