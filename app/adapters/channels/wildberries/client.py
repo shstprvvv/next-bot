@@ -14,13 +14,19 @@ class WBClient:
 
     def __init__(self, api_key: str):
         # Гарантируем, что ключ содержит только ASCII символы для httpx
-        safe_api_key = "".join(c for c in api_key if ord(c) < 128)
+        safe_api_key = "".join(c for c in str(api_key) if ord(c) < 128)
+        # Убираем пробелы, переносы строк и другие невидимые символы, которые могут сломать httpx
+        safe_api_key = safe_api_key.strip().replace('\n', '').replace('\r', '')
+        
         if not safe_api_key:
             safe_api_key = "invalid_key_was_cyrillic"
             
         self.api_key = safe_api_key
+        # Кодируем в ascii с игнорированием ошибок, чтобы гарантированно не было падений
+        ascii_key = safe_api_key.encode('ascii', 'ignore').decode('ascii')
+        
         self.headers = {
-            "Authorization": f"Bearer {safe_api_key}",
+            "Authorization": f"Bearer {ascii_key}",
             "Content-Type": "application/json"
         }
         self._client: Optional[httpx.AsyncClient] = None
