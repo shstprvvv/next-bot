@@ -25,8 +25,12 @@ class WBClient:
         # Кодируем в ascii с игнорированием ошибок, чтобы гарантированно не было падений
         ascii_key = safe_api_key.encode('ascii', 'ignore').decode('ascii')
         
+        # httpx падает, если в заголовках есть не-ascii символы.
+        # Для 100% гарантии мы кодируем строку в байты и обратно
+        final_key = ascii_key.encode("ascii", errors="ignore").decode("ascii")
+        
         self.headers = {
-            "Authorization": f"Bearer {ascii_key}",
+            "Authorization": f"Bearer {final_key}",
             "Content-Type": "application/json"
         }
         self._client: Optional[httpx.AsyncClient] = None
