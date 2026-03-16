@@ -13,9 +13,14 @@ class WBClient:
     BASE_URL = "https://feedbacks-api.wildberries.ru/api/v1"
 
     def __init__(self, api_key: str):
-        self.api_key = api_key
+        # Гарантируем, что ключ содержит только ASCII символы для httpx
+        safe_api_key = "".join(c for c in api_key if ord(c) < 128)
+        if not safe_api_key:
+            safe_api_key = "invalid_key_was_cyrillic"
+            
+        self.api_key = safe_api_key
         self.headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {safe_api_key}",
             "Content-Type": "application/json"
         }
         self._client: Optional[httpx.AsyncClient] = None
