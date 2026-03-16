@@ -37,6 +37,14 @@ def load_config():
             if cleaned_json.startswith("'") and cleaned_json.endswith("'"):
                 cleaned_json = cleaned_json[1:-1]
             
+            # Дополнительная очистка от одинарных кавычек внутри, если Docker их экранировал криво
+            if cleaned_json.startswith('"') and cleaned_json.endswith('"'):
+                # Если вся строка обернута в двойные кавычки, возможно это JSON-строка внутри строки
+                try:
+                    cleaned_json = json.loads(cleaned_json)
+                except:
+                    pass
+            
             extra_clients = json.loads(cleaned_json)
             clients.extend(extra_clients)
         except Exception as e:
