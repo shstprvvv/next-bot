@@ -46,6 +46,14 @@ def load_config():
                     pass
             
             extra_clients = json.loads(cleaned_json)
+            
+            # ВАЖНО: Очищаем ключи от возможных не-ASCII символов (например, кириллицы),
+            # так как httpx не может отправлять кириллицу в заголовках (Authorization)
+            for client in extra_clients:
+                if "wb_api_key" in client and client["wb_api_key"]:
+                    # Оставляем только ASCII символы в ключе
+                    client["wb_api_key"] = "".join(c for c in client["wb_api_key"] if ord(c) < 128)
+            
             clients.extend(extra_clients)
         except Exception as e:
             import logging
