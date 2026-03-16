@@ -32,11 +32,16 @@ def load_config():
     extra_clients_json = os.getenv("EXTRA_CLIENTS_JSON")
     if extra_clients_json:
         try:
-            extra_clients = json.loads(extra_clients_json)
+            # Пытаемся очистить строку от возможных экранирований, которые добавляет Docker
+            cleaned_json = extra_clients_json.replace('\\"', '"').replace('\\{', '{').replace('\\}', '}')
+            if cleaned_json.startswith("'") and cleaned_json.endswith("'"):
+                cleaned_json = cleaned_json[1:-1]
+            
+            extra_clients = json.loads(cleaned_json)
             clients.extend(extra_clients)
         except Exception as e:
             import logging
-            logging.error(f"Ошибка парсинга EXTRA_CLIENTS_JSON: {e}")
+            logging.error(f"Ошибка парсинга EXTRA_CLIENTS_JSON: {e}. Сырая строка: {extra_clients_json}")
 
     return {
         "CLIENTS": clients,
