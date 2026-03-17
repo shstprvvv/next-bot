@@ -22,12 +22,10 @@ class WBClient:
             safe_api_key = "invalid_key_was_cyrillic"
             
         self.api_key = safe_api_key
-        # Кодируем в ascii с игнорированием ошибок, чтобы гарантированно не было падений
-        ascii_key = safe_api_key.encode('ascii', 'ignore').decode('ascii')
         
         # httpx падает, если в заголовках есть не-ascii символы.
         # Для 100% гарантии мы кодируем строку в байты и обратно
-        final_key = ascii_key.encode("ascii", errors="ignore").decode("ascii")
+        final_key = safe_api_key.encode("ascii", errors="ignore").decode("ascii")
         
         self.headers = {
             "Authorization": f"Bearer {final_key}",
@@ -255,23 +253,33 @@ class WBClient:
         """
         url = "https://buyer-chat-api.wildberries.ru/api/v1/seller/message"
         
-        # По документации ожидается multipart/form-data.
-        # Но httpx может отправить JSON. Если WB строго требует multipart, 
-        # то JSON может не сработать.
-        payload = {
-            "chatId": chat_id,
-            "text": text,
-            "replySign": reply_sign
-        }
-        
         logger.info(f"[WBClient] Отправка сообщения в чат {chat_id}. Текст: {text[:50]}...")
-        data = await self._request_json("POST", url, json=payload)
         
-        if data is None:
-            logger.error(f"[WBClient] Не удалось отправить сообщение в чат {chat_id}. Ответ API: {data}")
+        client = self._get_client()
+        try:
+            # Отправляем именно multipart/form-data 
+            files = {
+                "replySign": (None, reply_sign),
+                "message": (None, text)
+            }
+            
+            # Нам нужно сделать отдельный запрос, так как _request_json отправляет json
+            resp = await client.post(
+                url,
+                headers={"Authorization": self.headers["Authorization"]},  # Без Content-Type, httpx сам установит boundary
+                files=files
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.error(f"[WBClient] Ошибка отправки сообщения в чат {chat_id}: {e}", exc_info=True)
             return False
             
-        logger.info(f"[WBClient] Сообщение в чат {chat_id} успешно отправлено.")
+        if not data:
+            logger.error(f"[WBClient] Не удалось отправить сообщение в чат {chat_id}. Пустой ответ.")
+            return False
+            
+        logger.info(f"[WBClient] Сообщение в чат {chat_id} успешно отправлено. Ответ: {data}")
         return True
 
     async def download_chat_file(self, download_id: str) -> Optional[bytes]:
