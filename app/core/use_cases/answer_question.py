@@ -29,6 +29,8 @@ class AnswerQuestionUseCase:
         # Динамический контекст для маршрутизатора
         if brand_context:
             router_context = brand_context
+        elif source == "sales_chat":
+            router_context = "Мы продаем ИИ-ассистента 'Next AI' для селлеров на маркетплейсах."
         elif source.startswith("wb"):
             router_context = "Мы продаем товары на Wildberries. ВАЖНО: Отвечай только по технической части товара."
         elif source.startswith("ozon"):

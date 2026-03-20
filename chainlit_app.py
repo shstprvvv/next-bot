@@ -20,8 +20,8 @@ async def start():
         )
         
         retriever_adapter = QdrantRetrieverAdapter(
-            collection_name="smart_bot_knowledge",
-            knowledge_base_path="knowledge_base.md",
+            collection_name="sales_bot_knowledge",
+            knowledge_base_path="sales_knowledge_base.md",
             openai_api_key=cfg.get("OPENAI_API_KEY"),
             openai_api_base=cfg.get("OPENAI_API_BASE")
         )
@@ -31,8 +31,9 @@ async def start():
         
         # Сохраняем в сессию пользователя
         cl.user_session.set("answer_use_case", answer_use_case)
+        cl.user_session.set("chat_history", [])
         
-        await cl.Message(content="Привет! Я твой AI-ассистент. Я уже изучил базу знаний и готов отвечать на вопросы.").send()
+        await cl.Message(content="Привет! 👋 Я — ИИ-ассистент, созданный на платформе Next AI. Я могу заменить 80% вашей службы поддержки на маркетплейсах. Расскажите, что вы продаете, и я покажу, как смогу вам помочь!").send()
     except Exception as e:
         import logging
         logging.error(f"Ошибка при старте чата: {e}", exc_info=True)
@@ -42,6 +43,7 @@ async def start():
 async def main(message: cl.Message):
     # Получаем Use Case из сессии
     answer_use_case = cl.user_session.get("answer_use_case")
+    history = cl.user_session.get("chat_history", [])
     
     # Создаем пустой ответ для стриминга (если нужно) или просто отправляем результат
     msg = cl.Message(content="")
@@ -49,7 +51,17 @@ async def main(message: cl.Message):
     # Вызываем логику ответа
     # В текущей реализации answer_question возвращает строку, 
     # но мы можем позже добавить стриминг
-    response = await answer_use_case.execute(user_id="chainlit_user", question=message.content, history=[])
+    response = await answer_use_case.execute(
+        user_id="chainlit_user", 
+        question=message.content, 
+        history=history,
+        source="sales_chat"
+    )
+    
+    # Обновляем историю
+    history.append(f"Клиент: {message.content}")
+    history.append(f"Бот: {response}")
+    cl.user_session.set("chat_history", history[-10:]) # Храним последние 10 сообщений
     
     msg.content = response
     await msg.send()
