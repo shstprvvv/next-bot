@@ -31,7 +31,53 @@ FEEDBACK_PROMPT_TEMPLATE = """Ты — официальный представи
 
 ТВОЙ ОТВЕТ:"""
 
-def build_feedback_prompt(text: str, valuation: int, product_name: str, context: str) -> str:
+def build_feedback_prompt(text: str, valuation: int, product_name: str, context: str, client_config: dict = None) -> str:
+    client_config = client_config or {}
+    client_id = client_config.get("id", "next")
+    
+    if client_id != "next":
+        brand_name = client_config.get("brand_name", "нашей компании")
+        tone_of_voice = client_config.get("tone_of_voice", "Будь кратким, вежливым и грамотным.")
+        custom_rules = client_config.get("custom_rules", "")
+        signature = client_config.get("signature", f"С уважением, команда {brand_name}")
+        
+        template = f"""Ты — официальный представитель бренда {brand_name}.
+
+Твоя задача — написать ответ на отзыв покупателя.
+
+ВХОДНЫЕ ДАННЫЕ:
+Товар: {{product_name}}
+Оценка: {{valuation}} из 5
+Текст отзыва: "{{text}}"
+
+КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ (если есть):
+{{context}}
+
+ПРАВИЛА ОТВЕТА:
+1. НИКОГДА не упоминай, что ты ИИ, бот или языковая модель. Говори от лица компании ("мы", "наша команда").
+2. СТРОГО ЗАПРЕЩЕНО ВЫДУМЫВАТЬ ФАКТЫ: Используй ТОЛЬКО информацию из предоставленного КОНТЕКСТА.
+3. СТРОГО ЗАПРЕЩЕНО использовать любые эмодзи (смайлики). Текст должен быть без единого эмодзи.
+4. СТРОГО ЗАПРЕЩЕНО указывать любые контактные данные: ссылки на сайты, номера телефонов, email, никнеймы, соцсети.
+5. СТРОГО ЗАПРЕЩЕНО провоцировать дискуссию: не проси связаться с нами, не проси предоставить фотографии или контакты, не задавай клиенту вопросов в ответе.
+6. СТРОГО ЗАПРЕЩЕНО обвинять покупателя или делать упреки.
+7. {tone_of_voice}
+{f"8. ДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА: {custom_rules}" if custom_rules else ""}
+
+ЛОГИКА ОТВЕТА:
+- Если оценка 5 звезд: Поблагодари за покупку и высокую оценку. Пожелай приятного использования. Сделай ответ уникальным и теплым.
+- Если оценка 4 звезды: Поблагодари за отзыв. Если в тексте есть замечание, вежливо прокомментируй его.
+- Если оценка 1-3 звезды (Негатив): Начни с извинений за доставленные неудобства. Если в контексте есть решение проблемы, предложи его.
+- Подписывайся: {signature}.
+
+ТВОЙ ОТВЕТ:"""
+        return template.format(
+            text=text,
+            valuation=valuation,
+            product_name=product_name,
+            context=context if context else "Нет дополнительной информации."
+        )
+
+    # Старая логика для клиента "next"
     return FEEDBACK_PROMPT_TEMPLATE.format(
         text=text,
         valuation=valuation,

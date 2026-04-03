@@ -48,14 +48,16 @@ class LangChainLLMAdapter(LLMClient):
 
         self._retry_on = self._build_retryable_exceptions()
 
-    async def generate(self, prompt: Union[str, List[Dict[str, Any]]]) -> str:
+    async def generate(self, prompt: Union[str, List[Any]]) -> str:
         async def _call():
             callbacks = [self.langfuse_handler] if self.langfuse_handler else None
             
-            # Если пришел список (например, с картинкой), оборачиваем в HumanMessage
+            # Если пришел список, предполагаем, что это список LangChain BaseMessage (или dict для старого формата),
+            # LangChain ChatOpenAI умеет принимать список BaseMessage напрямую.
             if isinstance(prompt, list):
-                messages = [HumanMessage(content=prompt)]
-                return await self.client.ainvoke(messages, config={"callbacks": callbacks})
+                # Если это старый формат [{"type": "text", "text": ...}], LangChain тоже может его понять,
+                # но лучше передавать BaseMessage.
+                return await self.client.ainvoke(prompt, config={"callbacks": callbacks})
             # Иначе просто отправляем строку
             return await self.client.ainvoke(prompt, config={"callbacks": callbacks})
 

@@ -9,6 +9,7 @@ import logging
 class AnswerQuestionUseCase:
     llm: LLMClient
     retriever: KnowledgeRetriever
+    client_config: Optional[dict] = None
     
     async def execute(self, user_id: Union[int, str], question: str, history: Optional[List[str]] = None, source: str = "telegram", image_base64: Optional[str] = None, brand_context: Optional[str] = None) -> str:
         """
@@ -27,7 +28,11 @@ class AnswerQuestionUseCase:
         # 1. Распознавание картинки и переписывание запроса (Context Enrichment)
         
         # Динамический контекст для маршрутизатора
-        if brand_context:
+        if self.client_config and self.client_config.get("id") != "next":
+            brand = self.client_config.get("brand_name", "нашей компании")
+            category = self.client_config.get("product_category", "наших товаров")
+            router_context = f"Мы продаем {category} под брендом {brand}."
+        elif brand_context:
             router_context = brand_context
         elif source == "sales_chat":
             router_context = "Мы продаем ИИ-ассистента 'Next AI' для селлеров на маркетплейсах."
@@ -53,7 +58,7 @@ class AnswerQuestionUseCase:
 - Удали из вопроса эмоции, маты, угрозы возвратом и "воду". Оставь только техническую суть проблемы.
 - Раскрой все местоимения (он, она, это), опираясь на историю.
 - Если клиент просто поздоровался, прислал смайлик или в его сообщении нет технического вопроса, напиши строго фразу: 'нет конкретной проблемы'.
-- Если клиент не уточнил, добавь контекст, что речь скорее всего про Смарт ТВ приставку.
+- Если клиент не уточнил, добавь контекст, что речь скорее всего про {self.client_config.get("product_category", "наш товар") if self.client_config and self.client_config.get("id") != "next" else "Смарт ТВ приставку"}.
 
 Формат ответа СТРОГО такой (два поля):
 ОПИСАНИЕ: <твое краткое описание фото>
@@ -109,7 +114,7 @@ class AnswerQuestionUseCase:
 - Удали из вопроса лишние эмоции, маты, угрозы возвратом и "воду". Оставь только техническую суть проблемы.
 - Раскрой все местоимения (он, она, это), опираясь на историю.
 - Если клиент просто поздоровался, прислал смайлик или в его сообщении нет технического вопроса, напиши строго фразу: 'нет конкретной проблемы'.
-- Если клиент не уточнил, добавь контекст, что речь скорее всего про Смарт ТВ приставку.
+- Если клиент не уточнил, добавь контекст, что речь скорее всего про {self.client_config.get("product_category", "наш товар") if self.client_config and self.client_config.get("id") != "next" else "Смарт ТВ приставку"}.
 - Не отвечай на вопрос! Просто напиши ОДНУ фразу — поисковый запрос.
 
 История диалога:
@@ -143,7 +148,7 @@ class AnswerQuestionUseCase:
             logging.info(f"[UseCase] Найдено {len(chunks)} фрагментов.")
 
         # 3. Сборка промпта
-        prompt = build_qa_prompt(question, context, history_text, source=source)
+        prompt = build_qa_prompt(question, context, history_text, source=source, client_config=self.client_config)
 
         # 4. Генерация ответа
         logging.info("[UseCase] Генерирую ответ через LLM...")

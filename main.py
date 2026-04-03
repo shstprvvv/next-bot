@@ -99,8 +99,8 @@ async def main():
         )
 
         # Специфичные для клиента Use Cases
-        answer_use_case = AnswerQuestionUseCase(llm=llm_adapter, retriever=retriever)
-        feedback_use_case = ReplyToFeedbackUseCase(llm=llm_adapter, retriever=retriever)
+        answer_use_case = AnswerQuestionUseCase(llm=llm_adapter, retriever=retriever, client_config=client)
+        feedback_use_case = ReplyToFeedbackUseCase(llm=llm_adapter, retriever=retriever, client_config=client)
 
         # --- Wildberries ---
         wb_key = client.get("wb_api_key")

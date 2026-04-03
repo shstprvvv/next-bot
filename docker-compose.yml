@@ -13,6 +13,16 @@ services:
     healthcheck:
       test: ["NONE"]
 
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
   bot:
     build: .
     container_name: smart-bot
@@ -25,14 +35,17 @@ services:
       - .env
     environment:
       - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
     command: python3 -u main.py
+    depends_on:
+      - redis
 
   chainlit:
     build: .
     container_name: chainlit-bot
     restart: always
     ports:
-      - "8000:8000"
+      - "8007:8000"
     volumes:
       - ./sessions:/app/sessions
       - ./knowledge_base.md:/app/knowledge_base.md
@@ -40,5 +53,8 @@ services:
       - .env
     environment:
       - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
     command: python3 -u -m chainlit run chainlit_app.py --host 0.0.0.0 --port 8000
+    depends_on:
+      - redis
 

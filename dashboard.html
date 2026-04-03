@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextBot — Панель управления</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --google-blue: #1a73e8;
+            --google-blue-hover: #1557b0;
+            --google-bg: #ffffff;
+            --google-surface: #f8f9fa;
+            --google-text: #202124;
+            --google-text-secondary: #5f6368;
+            --google-border: #dadce0;
+            --sidebar-width: 256px;
+            --right-panel-width: 350px;
+        }
+
+        body {
+            background-color: var(--google-bg);
+            color: var(--google-text);
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .font-google {
+            font-family: 'Google Sans', sans-serif;
+        }
+
+        /* ===== SIDEBAR (Левая панель) ===== */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--google-bg);
+            border-right: 1px solid var(--google-border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .logo-area {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--google-border);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 24px;
+            color: var(--google-text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            border-radius: 0 24px 24px 0;
+            margin-right: 16px;
+            margin-top: 8px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .nav-item:hover {
+            background-color: var(--google-surface);
+        }
+
+        .nav-item.active {
+            background-color: #e8f0fe;
+            color: var(--google-blue);
+        }
+
+        /* ===== MAIN CHAT AREA (Центральная панель) ===== */
+        .main-chat {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--google-bg);
+            position: relative;
+        }
+
+        .chat-header {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--google-border);
+            font-family: 'Google Sans', sans-serif;
+            font-size: 20px;
+            color: var(--google-text);
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .msg-row {
+            display: flex;
+            gap: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .msg-row.user {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .avatar.bot { background-color: #e8eaed; }
+        .avatar.user { background-color: var(--google-blue); color: white; }
+
+        .msg-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--google-text);
+        }
+
+        .msg-row.bot .msg-bubble {
+            background-color: var(--google-surface);
+            border-top-left-radius: 4px;
+        }
+
+        .msg-row.user .msg-bubble {
+            background-color: #e8f0fe;
+            border-top-right-radius: 4px;
+        }
+
+        .chat-input-area {
+            padding: 24px;
+            background: var(--google-bg);
+            border-top: 1px solid var(--google-border);
+        }
+
+        .input-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: var(--google-surface);
+            border-radius: 24px;
+            padding: 8px 16px;
+            border: 1px solid var(--google-border);
+            transition: box-shadow 0.2s, background-color 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        }
+
+        .chat-input {
+            flex-grow: 1;
+            border: none;
+            background: transparent;
+            padding: 8px;
+            font-size: 15px;
+            outline: none;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .send-btn {
+            background: transparent;
+            border: none;
+            color: var(--google-blue);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .send-btn:hover {
+            background-color: rgba(26,115,232,0.1);
+        }
+
+        /* ===== RIGHT WIDGET PANEL (Правая панель) ===== */
+        .right-panel {
+            width: var(--right-panel-width);
+            background-color: var(--google-bg);
+            border-left: 1px solid var(--google-border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 10;
+        }
+
+        .right-panel.open {
+            transform: translateX(0);
+            position: relative;
+        }
+
+        .widget-header {
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--google-border);
+            font-family: 'Google Sans', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .close-widget-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--google-text-secondary);
+            padding: 8px;
+            border-radius: 50%;
+        }
+        .close-widget-btn:hover { background-color: var(--google-surface); }
+
+        .widget-content {
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        /* Карточка бота в виджете */
+        .bot-card {
+            border: 1px solid var(--google-border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .bot-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #1e8e3e;
+            background: #e6f4ea;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        .bot-status::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background-color: #1e8e3e;
+            border-radius: 50%;
+        }
+
+        /* Блок кода */
+        .code-block {
+            background: #f1f3f4;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #3c4043;
+            overflow-x: auto;
+            position: relative;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: white;
+            border: 1px solid var(--google-border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="logo-area">
+            <div class="flex items-center gap-2 text-xl font-google font-bold text-gray-800">
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm">N</div>
+                NextBot
+            </div>
+        </div>
+        <div class="py-4">
+            <a href="#" class="nav-item active">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                ИИ-Менеджер
+            </a>
+            <a href="#" class="nav-item">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                Мои боты
+            </a>
+            <a href="#" class="nav-item">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Настройки
+            </a>
+        </div>
+        <div class="mt-auto p-4 border-t border-gray-200">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm" id="user-avatar">U</div>
+                <div class="text-sm">
+                    <div class="font-medium text-gray-800" id="user-email">Загрузка...</div>
+                    <a href="#" id="logout-btn" class="text-gray-500 hover:text-gray-800 text-xs">Выйти</a>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CHAT -->
+    <main class="main-chat">
+        <header class="chat-header">
+            Управление ботами
+        </header>
+        
+        <div class="chat-messages" id="chat-messages">
+            <!-- Приветствие -->
+            <div class="msg-row bot">
+                <div class="avatar bot">🤖</div>
+                <div class="msg-bubble">
+                    Привет! Я ваш ИИ-Менеджер. Я могу помочь вам настроить ваших ботов, показать статистику или выдать код для вставки на сайт. Что вас интересует?
+                    <br><br>
+                    Попробуйте спросить:
+                    <ul class="list-disc ml-5 mt-2 text-sm text-gray-600">
+                        <li>Покажи список моих ботов</li>
+                        <li>Как дела со статистикой за неделю?</li>
+                        <li>Дай код для вставки бота "СникерХед"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <form class="input-wrapper" id="chat-form">
+                <button type="button" class="text-gray-400 hover:text-gray-600 p-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                </button>
+                <input type="text" id="chat-input" class="chat-input" placeholder="Напишите запрос менеджеру..." autocomplete="off">
+                <button type="submit" class="send-btn">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <!-- RIGHT PANEL (WIDGETS) -->
+    <aside class="right-panel" id="right-panel">
+        <div class="widget-header">
+            <span id="widget-title">Информация</span>
+            <button class="close-widget-btn" id="close-panel-btn">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="widget-content" id="widget-content">
+            <!-- Сюда динамически подставляется контент (графики, списки) -->
+        </div>
+    </aside>
+
+    <script>
+        // Проверка авторизации
+        const token = localStorage.getItem('nextbot_token');
+        if (!token) {
+            window.location.href = 'login.html';
+        } else {
+            // Декодируем JWT токен для получения email (простой способ без бэкенда)
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const email = payload.sub;
+                document.getElementById('user-email').textContent = email;
+                document.getElementById('user-avatar').textContent = email.charAt(0).toUpperCase();
+            } catch (e) {
+                console.error("Invalid token");
+                localStorage.removeItem('nextbot_token');
+                window.location.href = 'login.html';
+            }
+        }
+
+        document.getElementById('logout-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('nextbot_token');
+            window.location.href = 'login.html';
+        });
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+        const rightPanel = document.getElementById('right-panel');
+        const closePanelBtn = document.getElementById('close-panel-btn');
+        const widgetTitle = document.getElementById('widget-title');
+        const widgetContent = document.getElementById('widget-content');
+
+        // Закрытие правой панели
+        closePanelBtn.addEventListener('click', () => {
+            rightPanel.classList.remove('open');
+        });
+
+        // Добавление сообщения в чат
+        function addMessage(text, sender) {
+            const row = document.createElement('div');
+            row.className = `msg-row ${sender}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = `avatar ${sender}`;
+            avatar.textContent = sender === 'bot' ? '🤖' : 'A'; // 'A' для admin
+
+            const bubble = document.createElement('div');
+            bubble.className = 'msg-bubble';
+            bubble.innerHTML = text;
+
+            row.appendChild(avatar);
+            row.appendChild(bubble);
+            chatMessages.appendChild(row);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Имитация работы ИИ-Менеджера (пока без бэкенда)
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            chatInput.value = '';
+
+            // Простая логика ответов для демонстрации
+            setTimeout(() => {
+                const lowerText = text.toLowerCase();
+                
+                if (lowerText.includes('статистик')) {
+                    addMessage('Вот статистика обращений к вашим ботам за последние 7 дней. Я вывел график на панели справа.', 'bot');
+                    showChartWidget();
+                } 
+                else if (lowerText.includes('список') || lowerText.includes('мои бот')) {
+                    addMessage('У вас сейчас активен один бот. Информация о нем доступна на панели справа.', 'bot');
+                    showBotsWidget();
+                }
+                else if (lowerText.includes('код') || lowerText.includes('вставк')) {
+                    addMessage('Конечно! Вот код для вставки бота на ваш сайт. Скопируйте его из панели справа.', 'bot');
+                    showCodeWidget();
+                }
+                else {
+                    addMessage('Понял вас. Эта функция пока в разработке, но скоро я научусь выполнять и такие команды! Попробуйте спросить про статистику или код для вставки.', 'bot');
+                }
+            }, 1000);
+        });
+
+        // --- Виджеты для правой панели ---
+
+        function showChartWidget() {
+            widgetTitle.textContent = 'Статистика (7 дней)';
+            widgetContent.innerHTML = '<canvas id="myChart"></canvas>';
+            rightPanel.classList.add('open');
+
+            const ctx = document.getElementById('myChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+                    datasets: [{
+                        label: 'Диалоги',
+                        data: [12, 19, 15, 25, 22, 30, 28],
+                        borderColor: '#1a73e8',
+                        backgroundColor: 'rgba(26,115,232,0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function showBotsWidget() {
+            widgetTitle.textContent = 'Мои боты';
+            widgetContent.innerHTML = `
+                <div class="bot-card">
+                    <h3 class="font-google font-bold text-lg mb-1">СникерХед Поддержка</h3>
+                    <p class="text-xs text-gray-500 mb-3">ID: asst_tjUR8YuXmlJIKsp4gZi2h2Ru</p>
+                    <div class="bot-status mb-3">Активен</div>
+                    <div class="flex gap-2">
+                        <button class="text-sm text-blue-600 font-medium hover:underline" onclick="showCodeWidget()">Получить код</button>
+                    </div>
+                </div>
+            `;
+            rightPanel.classList.add('open');
+        }
+
+        function showCodeWidget() {
+            widgetTitle.textContent = 'Установка на сайт';
+            widgetContent.innerHTML = `
+                <p class="text-sm text-gray-600 mb-4">Скопируйте этот код и вставьте его перед закрывающим тегом <code>&lt;/body&gt;</code> на вашем сайте.</p>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="alert('Код скопирован!')">Копировать</button>
+&lt;script&gt;
+  var ASSISTANT_ID = 'asst_tjUR8YuXmlJIKsp4gZi2h2Ru';
+&lt;/script&gt;
+&lt;script src="https://nextbot.ru/widget.js" defer&gt;&lt;/script&gt;
+                </div>
+            `;
+            rightPanel.classList.add('open');
+        }
+    </script>
+</body>
+</html>

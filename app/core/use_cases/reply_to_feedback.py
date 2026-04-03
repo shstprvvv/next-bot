@@ -4,10 +4,13 @@ from app.core.ports.retriever import KnowledgeRetriever
 from app.prompts.feedback_prompt import build_feedback_prompt
 import logging
 
+from typing import Optional
+
 @dataclass
 class ReplyToFeedbackUseCase:
     llm: LLMClient
     retriever: KnowledgeRetriever
+    client_config: Optional[dict] = None
     
     async def execute(self, review_text: str, valuation: int, product_name: str) -> str:
         """
@@ -20,8 +23,15 @@ class ReplyToFeedbackUseCase:
         # 1. Поиск в базе знаний (только если есть текст отзыва)
         context = ""
         if review_text and len(review_text) > 3:
+            if self.client_config and self.client_config.get("id") != "next":
+                brand = self.client_config.get("brand_name", "нашей компании")
+                category = self.client_config.get("product_category", "наших товаров")
+                router_context = f"Мы продаем {category} под брендом {brand}."
+            else:
+                router_context = "Мы продаем Смарт ТВ приставки на Wildberries. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами."
+
             reformulate_prompt = f"""Ты — умный маршрутизатор отзывов покупателей.
-Мы продаем Смарт ТВ приставки на Wildberries. ВАЖНО: Мы здесь НЕ обслуживаем приложение с ТВ-каналами.
+{router_context}
 Товар: {product_name}. Оценка: {valuation} звезд.
 Покупатель написал отзыв: "{review_text}"
 
@@ -54,7 +64,8 @@ class ReplyToFeedbackUseCase:
             text=review_text, 
             valuation=valuation, 
             product_name=product_name, 
-            context=context
+            context=context,
+            client_config=self.client_config
         )
 
         # 3. Генерация ответа

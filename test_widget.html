@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест виджета чата</title>
+    <!-- Стили виджета -->
+    <style>
+        /* Кнопка открытия чата */
+        #nextbot-toggle-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #0088cc, #005580);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0, 136, 204, 0.4);
+            cursor: pointer;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+        #nextbot-toggle-btn:hover {
+            transform: scale(1.05);
+        }
+        #nextbot-toggle-btn svg {
+            width: 30px;
+            height: 30px;
+            fill: currentColor;
+        }
+
+        /* Окно чата */
+        #nextbot-chat-window {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            display: none;
+            flex-direction: column;
+            z-index: 9999;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            border: 1px solid #eaeaea;
+        }
+
+        /* Шапка чата */
+        #nextbot-chat-header {
+            background: linear-gradient(135deg, #0088cc, #005580);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #nextbot-chat-header-title {
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .nextbot-online-indicator {
+            width: 8px;
+            height: 8px;
+            background-color: #4ade80;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        #nextbot-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0.8;
+        }
+        #nextbot-close-btn:hover { opacity: 1; }
+
+        /* Область сообщений */
+        #nextbot-chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Стили сообщений */
+        .nextbot-msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .nextbot-msg.bot {
+            background: white;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .nextbot-msg.user {
+            background: #0088cc;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,136,204,0.2);
+        }
+
+        /* Индикатор печати */
+        .nextbot-typing {
+            display: none;
+            align-self: flex-start;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .nextbot-typing span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #9ca3af;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: nextbot-bounce 1.4s infinite ease-in-out both;
+        }
+        .nextbot-typing span:nth-child(1) { animation-delay: -0.32s; }
+        .nextbot-typing span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes nextbot-bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Область ввода */
+        #nextbot-chat-input-area {
+            padding: 12px;
+            background: white;
+            border-top: 1px solid #eaeaea;
+            display: flex;
+            gap: 8px;
+        }
+        #nextbot-chat-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            outline: none;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        #nextbot-chat-input:focus {
+            border-color: #0088cc;
+        }
+        #nextbot-chat-send {
+            background: #0088cc;
+            color: white;
+            border: none;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        #nextbot-chat-send:hover {
+            background: #0077b3;
+        }
+        #nextbot-chat-send svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+            margin-left: 2px;
+        }
+        
+        /* Markdown стили в ответах */
+        .nextbot-msg p { margin: 0 0 8px 0; }
+        .nextbot-msg p:last-child { margin: 0; }
+        .nextbot-msg ul, .nextbot-msg ol { margin: 4px 0; padding-left: 20px; }
+        .nextbot-msg strong { font-weight: 600; }
+    </style>
+</head>
+<body style="background-color: #f0f2f5; font-family: sans-serif; padding: 50px;">
+
+    <h1>Тестовая страница для виджета</h1>
+    <p>Здесь имитируется ваш сайт (например, лендинг мессенджера "Связь").</p>
+    <p>В правом нижнем углу находится кнопка виджета.</p>
+
+    <!-- HTML структура виджета -->
+    <div id="nextbot-widget">
+        <!-- Кнопка -->
+        <button id="nextbot-toggle-btn" aria-label="Открыть чат">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.745.446 3.384 1.229 4.814L2 22l5.35-1.163A9.957 9.957 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18c-1.44 0-2.81-.306-4.04-.848l-.29-.126-2.92.635.65-2.8-.14-.3A7.95 7.95 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/></svg>
+        </button>
+
+        <!-- Окно чата -->
+        <div id="nextbot-chat-window">
+            <div id="nextbot-chat-header">
+                <div id="nextbot-chat-header-title">
+                    <span class="nextbot-online-indicator"></span>
+                    Поддержка "Связь"
+                </div>
+                <button id="nextbot-close-btn">&times;</button>
+            </div>
+            
+            <div id="nextbot-chat-messages">
+                <div class="nextbot-msg bot">
+                    Привет! 👋 Я — ИИ-ассистент мессенджера «Связь». Я могу рассказать о преимуществах нашего защищенного корпоративного мессенджера или помочь с техническими вопросами. Что вас интересует?
+                </div>
+                <div class="nextbot-typing" id="nextbot-typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+
+            <div id="nextbot-chat-input-area">
+                <input type="text" id="nextbot-chat-input" placeholder="Введите сообщение..." autocomplete="off">
+                <button id="nextbot-chat-send" aria-label="Отправить">
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Логика виджета -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // URL нашего API сервера (FastAPI)
+            const API_URL = 'http://localhost:8080/api/chat';
+            
+            // Состояние
+            let chatHistory = [];
+            const sessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+            
+            // Элементы DOM
+            const toggleBtn = document.getElementById('nextbot-toggle-btn');
+            const chatWindow = document.getElementById('nextbot-chat-window');
+            const closeBtn = document.getElementById('nextbot-close-btn');
+            const messagesContainer = document.getElementById('nextbot-chat-messages');
+            const inputField = document.getElementById('nextbot-chat-input');
+            const sendBtn = document.getElementById('nextbot-chat-send');
+            const typingIndicator = document.getElementById('nextbot-typing-indicator');
+
+            // Открытие/закрытие чата
+            toggleBtn.addEventListener('click', () => {
+                chatWindow.style.display = 'flex';
+                toggleBtn.style.display = 'none';
+                inputField.focus();
+            });
+
+            closeBtn.addEventListener('click', () => {
+                chatWindow.style.display = 'none';
+                toggleBtn.style.display = 'flex';
+            });
+
+            // Простой парсер Markdown (жирный текст и переносы строк)
+            function parseMarkdown(text) {
+                let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(/\n/g, '<br>');
+                return html;
+            }
+
+            // Добавление сообщения в UI
+            function appendMessage(content, role) {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `nextbot-msg ${role}`;
+                msgDiv.innerHTML = parseMarkdown(content);
+                
+                // Вставляем перед индикатором печати
+                messagesContainer.insertBefore(msgDiv, typingIndicator);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            // Отправка сообщения на сервер
+            async function sendMessage() {
+                const text = inputField.value.trim();
+                if (!text) return;
+
+                // Очищаем поле и показываем сообщение юзера
+                inputField.value = '';
+                appendMessage(text, 'user');
+                
+                // Показываем индикатор печати
+                typingIndicator.style.display = 'flex';
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                try {
+                    // Отправляем запрос к FastAPI
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: text,
+                            history: chatHistory,
+                            session_id: sessionId
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    
+                    const data = await response.json();
+                    
+                    // Скрываем индикатор и показываем ответ
+                    typingIndicator.style.display = 'none';
+                    appendMessage(data.reply, 'bot');
+
+                    // Сохраняем в историю (оставляем только последние 10 сообщений)
+                    chatHistory.push({ role: 'user', content: text });
+                    chatHistory.push({ role: 'bot', content: data.reply });
+                    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    typingIndicator.style.display = 'none';
+                    appendMessage('Извините, произошла ошибка связи с сервером. Попробуйте позже.', 'bot');
+                }
+            }
+
+            // Обработчики событий отправки
+            sendBtn.addEventListener('click', sendMessage);
+            inputField.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+        });
+    </script>
+</body>
+</html>

@@ -17,8 +17,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger(__name__)
 
-KNOWLEDGE_BASE_PATH = "knowledge_base.md"
-COLLECTION_NAME = "smart_bot_knowledge"
+KNOWLEDGE_BASE_PATH = os.getenv("KB_PATH", "knowledge_base.md")
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "smart_bot_knowledge")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
 

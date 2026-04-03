@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextBot — Вход в систему</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --google-blue: #1a73e8;
+            --google-blue-hover: #1557b0;
+            --google-bg: #ffffff;
+            --google-surface: #f8f9fa;
+            --google-text: #202124;
+            --google-text-secondary: #5f6368;
+            --google-border: #dadce0;
+            --google-error: #d93025;
+        }
+
+        body {
+            background-color: var(--google-surface);
+            color: var(--google-text);
+            font-family: 'Roboto', Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .font-google {
+            font-family: 'Google Sans', sans-serif;
+        }
+
+        .auth-card {
+            background: white;
+            border: 1px solid var(--google-border);
+            border-radius: 8px;
+            padding: 48px 40px 36px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .google-input {
+            width: 100%;
+            padding: 13px 15px;
+            border: 1px solid var(--google-border);
+            border-radius: 4px;
+            font-size: 16px;
+            font-family: 'Roboto', sans-serif;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: transparent;
+        }
+
+        .google-input:focus {
+            border-color: var(--google-blue);
+            box-shadow: inset 0 0 0 1px var(--google-blue);
+        }
+
+        .google-label {
+            position: absolute;
+            left: 12px;
+            top: 14px;
+            background: white;
+            padding: 0 4px;
+            color: var(--google-text-secondary);
+            font-size: 16px;
+            transition: 0.2s ease all;
+            pointer-events: none;
+        }
+
+        .google-input:focus ~ .google-label,
+        .google-input:not(:placeholder-shown) ~ .google-label {
+            top: -9px;
+            font-size: 12px;
+            color: var(--google-blue);
+        }
+        
+        .google-input:not(:focus):not(:placeholder-shown) ~ .google-label {
+            color: var(--google-text-secondary);
+        }
+
+        .btn-google {
+            background-color: var(--google-blue);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: 'Google Sans', sans-serif;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-google:hover {
+            background-color: var(--google-blue-hover);
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+        }
+
+        .btn-text {
+            background: transparent;
+            color: var(--google-blue);
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: 'Google Sans', sans-serif;
+            cursor: pointer;
+            padding: 8px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-text:hover {
+            background-color: rgba(26,115,232,0.04);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="auth-card">
+        <div class="text-center mb-8">
+            <div class="flex items-center justify-center gap-2 text-2xl font-google font-bold text-gray-800 mb-4">
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm">N</div>
+                NextBot
+            </div>
+            <h1 class="text-2xl font-google font-normal mb-2" id="form-title">Вход</h1>
+            <p class="text-gray-600 text-sm" id="form-subtitle">Используйте ваш аккаунт NextBot</p>
+        </div>
+
+        <form id="auth-form">
+            <div class="input-group">
+                <input type="email" id="email" class="google-input" placeholder=" " required>
+                <label for="email" class="google-label">Телефон или адрес эл. почты</label>
+            </div>
+            
+            <div class="input-group" id="password-group" style="display: none;">
+                <input type="password" id="password" class="google-input" placeholder=" ">
+                <label for="password" class="google-label">Введите пароль</label>
+            </div>
+
+            <div class="flex items-center justify-between mt-12">
+                <button type="button" class="btn-text" id="toggle-mode-btn">Создать аккаунт</button>
+                <button type="submit" class="btn-google" id="submit-btn">Далее</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('auth-form');
+        const emailInput = document.getElementById('email');
+        const passwordGroup = document.getElementById('password-group');
+        const passwordInput = document.getElementById('password');
+        const submitBtn = document.getElementById('submit-btn');
+        const toggleModeBtn = document.getElementById('toggle-mode-btn');
+        const formTitle = document.getElementById('form-title');
+        const formSubtitle = document.getElementById('form-subtitle');
+
+        let step = 'email'; // 'email', 'password', 'register'
+        let mode = 'login'; // 'login', 'register'
+
+        toggleModeBtn.addEventListener('click', () => {
+            if (mode === 'login') {
+                mode = 'register';
+                formTitle.textContent = 'Создать аккаунт';
+                formSubtitle.textContent = 'Продолжите в NextBot';
+                toggleModeBtn.textContent = 'Войти вместо этого';
+                step = 'email';
+                passwordGroup.style.display = 'none';
+                passwordInput.removeAttribute('required');
+                submitBtn.textContent = 'Далее';
+            } else {
+                mode = 'login';
+                formTitle.textContent = 'Вход';
+                formSubtitle.textContent = 'Используйте ваш аккаунт NextBot';
+                toggleModeBtn.textContent = 'Создать аккаунт';
+                step = 'email';
+                passwordGroup.style.display = 'none';
+                passwordInput.removeAttribute('required');
+                submitBtn.textContent = 'Далее';
+            }
+        });
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            if (step === 'email') {
+                if (emailInput.value) {
+                    step = 'password';
+                    passwordGroup.style.display = 'block';
+                    passwordInput.setAttribute('required', 'true');
+                    passwordInput.focus();
+                    
+                    if (mode === 'login') {
+                        formTitle.textContent = 'Добро пожаловать';
+                        formSubtitle.textContent = emailInput.value;
+                        submitBtn.textContent = 'Вход';
+                    } else {
+                        formTitle.textContent = 'Придумайте пароль';
+                        formSubtitle.textContent = emailInput.value;
+                        submitBtn.textContent = 'Зарегистрироваться';
+                    }
+                }
+            } else if (step === 'password') {
+                // Здесь будет логика отправки на бэкенд (FastAPI)
+                console.log(`Mode: ${mode}, Email: ${emailInput.value}, Password: ${passwordInput.value}`);
+                
+            // Временная заглушка для перехода в админку
+            const url = mode === 'login' ? 'http://localhost:8080/api/auth/login' : 'http://localhost:8080/api/auth/register';
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: emailInput.value,
+                    password: passwordInput.value
+                })
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Ошибка авторизации');
+                }
+                return response.json();
+            })
+            .then(data => {
+                localStorage.setItem('nextbot_token', data.access_token);
+                window.location.href = 'dashboard.html';
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error.message);
+                console.error('Auth error:', error);
+            });
+        }
+    });
+</script>
+</body>
+</html>
