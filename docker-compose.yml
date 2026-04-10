@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -22,7 +20,7 @@ services:
     command: redis-server --save 60 1 --loglevel warning
 
   bot:
-    image: next-bot-app:latest
+    image: ${APP_IMAGE:-next-bot-app:latest}
     build: .
     container_name: smart-bot
     restart: always
@@ -41,7 +39,7 @@ services:
       - redis
 
   api:
-    image: next-bot-app:latest
+    image: ${APP_IMAGE:-next-bot-app:latest}
     build: .
     container_name: nextbot-api
     restart: always

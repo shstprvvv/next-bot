@@ -27,8 +27,21 @@ fi
 echo "==> Updating repository"
 git pull --ff-only
 
-echo "==> Rebuilding containers"
-"${COMPOSE_CMD[@]}" up -d --build
+APP_IMAGE_VALUE="${APP_IMAGE:-}"
+if [[ -z "$APP_IMAGE_VALUE" && -f .env ]]; then
+  APP_IMAGE_VALUE="$(sed -n 's/^APP_IMAGE=//p' .env | tail -n1)"
+fi
+
+if [[ -n "$APP_IMAGE_VALUE" ]]; then
+  echo "==> Pulling image: $APP_IMAGE_VALUE"
+  "${COMPOSE_CMD[@]}" pull api bot
+
+  echo "==> Starting containers from registry image"
+  "${COMPOSE_CMD[@]}" up -d --remove-orphans
+else
+  echo "==> Rebuilding containers locally"
+  "${COMPOSE_CMD[@]}" up -d --build
+fi
 
 echo "==> Waiting for API healthcheck"
 ATTEMPTS=20
