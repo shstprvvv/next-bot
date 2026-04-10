@@ -22,6 +22,7 @@ services:
     command: redis-server --save 60 1 --loglevel warning
 
   bot:
+    image: next-bot-app:latest
     build: .
     container_name: smart-bot
     restart: always
@@ -40,6 +41,7 @@ services:
       - redis
 
   api:
+    image: next-bot-app:latest
     build: .
     container_name: nextbot-api
     restart: always
