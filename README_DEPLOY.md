@@ -1,68 +1,76 @@
-# Инструкция по деплою Smart Bot на сервер
+# Деплой
 
-## 1. Подготовка сервера
-Убедитесь, что на сервере установлены `git` и `docker` с `docker-compose`.
+Минимальный deploy flow в проекте теперь такой:
+
+1. Локально запушить изменения в GitHub.
+2. На сервере выполнить одну команду: `make deploy`
+3. При необходимости смотреть `make logs-api` или `make logs-bot`
+
+## Подготовка сервера
+
+Убедитесь, что на сервере установлены:
+- `git`
+- `docker`
+- `docker-compose` или `docker compose`
+- `curl`
+
+Пример для Ubuntu:
 
 ```bash
-# Пример для Ubuntu
-sudo apt update
-sudo apt install git docker.io docker-compose -y
+apt update
+apt install -y git docker.io docker-compose curl
 ```
 
-## 2. Первый запуск
+## Первый запуск
 
-1. **Клонируйте репозиторий:**
-   ```bash
-   git clone <ссылка_на_ваш_репозиторий>
-   cd smart-bot
-   ```
-
-2. **Создайте файл .env:**
-   Скопируйте содержимое вашего локального `.env` файла.
-   ```bash
-   nano .env
-   # Вставьте переменные (API ключи и т.д.)
-   # Ctrl+O, Enter, Ctrl+X для сохранения
-   ```
-
-3. **Запустите бота:**
-   ```bash
-   docker-compose up -d --build
-   ```
-   Флаг `-d` запускает в фоновом режиме. `--build` пересобирает контейнер.
-
-4. **Проверка логов:**
-   ```bash
-   docker-compose logs -f
-   ```
-
-## 3. Обновление кода (CI/CD "для ленивых")
-
-Когда вы внесли изменения в код и запушили их в репозиторий:
-
-1. Зайдите на сервер:
-   ```bash
-   ssh user@your-server-ip
-   cd smart-bot
-   ```
-
-2. Выполните обновление одной командой:
-   ```bash
-   git pull && docker-compose up -d --build
-   ```
-   Эта команда скачает обновления, пересоберет контейнер с новым кодом и перезапустит его.
-
-## 4. Обновление базы знаний
-
-Если вы изменили файл `knowledge_base.md`:
-
-**Вариант А (Простой):**
-Просто перезапустите деплой (пункт 3). Файл проброшен через volume, но индекс нужно перестроить.
-Можно зайти внутрь контейнера и запустить скрипт:
 ```bash
-docker-compose exec bot python3 rebuild_knowledge_base.py
-docker-compose restart bot
+git clone <repo-url> next-bot
+cd next-bot
+cp .env.example .env
 ```
 
-**Вариант Б (Правильный):**
-Перестройте индекс локально, закоммитьте папку `faiss_index` и сделайте деплой.
+Заполните `.env`, затем выполните:
+
+```bash
+docker-compose up -d --build
+```
+
+## Обновление проекта
+
+После `git push` локальных изменений:
+
+```bash
+ssh root@your-server
+cd ~/next-bot
+make deploy
+```
+
+Что делает `make deploy`:
+- выполняет `git pull --ff-only`
+- пересобирает контейнеры через Docker Compose
+- ждет успешный ответ от `http://localhost:8080/health`
+- показывает статус контейнеров
+
+Если healthcheck не прошел, скрипт выводит последние логи `api`.
+
+## Полезные команды
+
+```bash
+make status
+make health
+make logs
+make logs-api
+make logs-bot
+make build
+make restart
+```
+
+## Ручной fallback
+
+Если нужен старый ручной сценарий:
+
+```bash
+git pull --ff-only
+docker-compose up -d --build
+curl http://localhost:8080/health
+```
