@@ -547,8 +547,8 @@ async function loadClientInfo() {
     renderChannels(info.channels || []);
     initChat();
 
-    // Then check live status (async, updates badges)
-    checkChannelsLive();
+    // Then check live status after first paint so the page appears instantly
+    setTimeout(checkChannelsLive, 150);
 }
 
 function renderChannels(channels, liveStatus) {

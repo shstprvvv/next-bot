@@ -563,7 +563,7 @@ async def _ozon_api_probe(client_id: str, api_key: str, endpoint: str, payload: 
 
     try:
         connector = aiohttp.TCPConnector(ssl=False)
-        timeout = aiohttp.ClientTimeout(total=15)
+        timeout = aiohttp.ClientTimeout(total=6)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             async with session.post(url, headers=headers, json=payload) as response:
                 text = await response.text()
@@ -595,7 +595,7 @@ async def _check_telegram_live_status() -> dict:
     client = None
     try:
         client = TelegramClient(MemorySession(), int(api_id), api_hash)
-        await asyncio.wait_for(client.connect(), timeout=12)
+        await asyncio.wait_for(client.connect(), timeout=4)
         if client.is_connected():
             masked_phone = f"{phone[:7]}***" if phone else "скрыт"
             return {"status": "active", "message": f"Подключен, телефон: {masked_phone}"}
@@ -726,15 +726,17 @@ async def check_channels_live(request: Request, current_user: User = Depends(get
 
     results = {}
 
-    # Wildberries
-    wb_key = client_cfg.get("wb_api_key") if client_cfg else None
-    if wb_key:
+    async def check_wildberries() -> dict:
+        wb_key = client_cfg.get("wb_api_key") if client_cfg else None
+        if not wb_key:
+            return {"status": "off", "message": "Ключ не задан"}
+
         try:
             wb = WBClient(api_key=wb_key)
             questions = await wb.get_unanswered_questions()
             feedbacks = await wb.get_unanswered_feedbacks()
             await wb.aclose()
-            results["wildberries"] = {
+            return {
                 "status": "active",
                 "unanswered_questions": len(questions),
                 "unanswered_feedbacks": len(feedbacks),
@@ -743,37 +745,39 @@ async def check_channels_live(request: Request, current_user: User = Depends(get
         except Exception as e:
             err_msg = str(e)
             is_expired = "401" in err_msg or "expired" in err_msg.lower() or "unauthorized" in err_msg.lower()
-            results["wildberries"] = {
+            return {
                 "status": "error" if is_expired else "warning",
                 "unanswered_questions": 0,
                 "unanswered_feedbacks": 0,
                 "message": "API-ключ истёк, обновите на seller.wildberries.ru" if is_expired else f"Ошибка: {err_msg[:100]}"
             }
-    else:
-        results["wildberries"] = {"status": "off", "message": "Ключ не задан"}
 
-    # Ozon
-    oz_id = client_cfg.get("ozon_client_id") if client_cfg else None
-    oz_key = client_cfg.get("ozon_api_key") if client_cfg else None
-    if oz_id and oz_key:
+    async def check_ozon() -> dict:
+        oz_id = client_cfg.get("ozon_client_id") if client_cfg else None
+        oz_key = client_cfg.get("ozon_api_key") if client_cfg else None
+        if not oz_id or not oz_key:
+            return {"status": "off", "message": "Ключи не заданы"}
+
         try:
-            questions_probe = await _ozon_api_probe(
-                oz_id,
-                oz_key,
-                "/v1/question/list",
-                {"filter": {"status": "NEW"}, "limit": 10, "last_id": ""},
-            )
-            chats_probe = await _ozon_api_probe(
-                oz_id,
-                oz_key,
-                "/v3/chat/list",
-                {"filter": {"chat_status": "Opened"}, "limit": 10, "offset": 0},
-            )
-            reviews_probe = await _ozon_api_probe(
-                oz_id,
-                oz_key,
-                "/v1/review/list",
-                {"with_interaction_status": ["UNVIEWED", "UNANSWERED"], "limit": 10, "sort_dir": "DESC"},
+            questions_probe, chats_probe, reviews_probe = await asyncio.gather(
+                _ozon_api_probe(
+                    oz_id,
+                    oz_key,
+                    "/v1/question/list",
+                    {"filter": {"status": "NEW"}, "limit": 10, "last_id": ""},
+                ),
+                _ozon_api_probe(
+                    oz_id,
+                    oz_key,
+                    "/v3/chat/list",
+                    {"filter": {"chat_status": "Opened"}, "limit": 10, "offset": 0},
+                ),
+                _ozon_api_probe(
+                    oz_id,
+                    oz_key,
+                    "/v1/review/list",
+                    {"with_interaction_status": ["UNVIEWED", "UNANSWERED"], "limit": 10, "sort_dir": "DESC"},
+                ),
             )
 
             questions_data = questions_probe.get("data") or {}
@@ -792,52 +796,55 @@ async def check_channels_live(request: Request, current_user: User = Depends(get
             )
 
             auth_broken = any(
-                probe.get("status_code") in (401, 403) and not (
-                    probe is reviews_probe and reviews_limited
-                )
+                probe.get("status_code") in (401, 403) and not (probe is reviews_probe and reviews_limited)
                 for probe in (questions_probe, chats_probe)
             )
 
             if auth_broken:
-                results["ozon"] = {
+                return {
                     "status": "error",
                     "unanswered_questions": 0,
                     "unanswered_chats": 0,
                     "unanswered_reviews": 0,
                     "message": "Ozon API не отвечает: проверьте Client-Id и Api-Key",
                 }
-            elif reviews_limited:
-                results["ozon"] = {
+            if reviews_limited:
+                return {
                     "status": "warning",
                     "unanswered_questions": questions_count,
                     "unanswered_chats": chats_count,
                     "unanswered_reviews": 0,
                     "message": "Отзывы не работают из-за ограничения подписки Ozon, вопросы и чаты доступны",
                 }
-            elif questions_probe.get("ok") or chats_probe.get("ok") or reviews_probe.get("ok"):
-                results["ozon"] = {
+            if questions_probe.get("ok") or chats_probe.get("ok") or reviews_probe.get("ok"):
+                return {
                     "status": "active",
                     "unanswered_questions": questions_count,
                     "unanswered_chats": chats_count,
                     "unanswered_reviews": reviews_count,
                     "message": f"{questions_count} вопросов, {reviews_count} отзывов и {chats_count} чатов требуют внимания",
                 }
-            else:
-                details = questions_probe.get("text") or chats_probe.get("text") or reviews_probe.get("text") or "неизвестная ошибка"
-                results["ozon"] = {
-                    "status": "warning",
-                    "unanswered_questions": 0,
-                    "unanswered_chats": 0,
-                    "unanswered_reviews": 0,
-                    "message": f"Ozon отвечает нестабильно: {details[:120]}",
-                }
-        except Exception as e:
-            results["ozon"] = {"status": "error", "message": str(e)[:100]}
-    else:
-        results["ozon"] = {"status": "off", "message": "Ключи не заданы"}
 
-    # Telegram
-    results["telegram"] = await _check_telegram_live_status()
+            details = questions_probe.get("text") or chats_probe.get("text") or reviews_probe.get("text") or "неизвестная ошибка"
+            return {
+                "status": "warning",
+                "unanswered_questions": 0,
+                "unanswered_chats": 0,
+                "unanswered_reviews": 0,
+                "message": f"Ozon отвечает нестабильно: {details[:120]}",
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)[:100]}
+
+    wb_result, ozon_result, telegram_result = await asyncio.gather(
+        check_wildberries(),
+        check_ozon(),
+        _check_telegram_live_status(),
+    )
+
+    results["wildberries"] = wb_result
+    results["ozon"] = ozon_result
+    results["telegram"] = telegram_result
 
     return results
 
