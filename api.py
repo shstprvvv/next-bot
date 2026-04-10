@@ -2,7 +2,10 @@ import os
 import logging
 import json
 import traceback
+import asyncio
 from typing import List, Optional, Dict
+
+import aiohttp
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -29,6 +32,8 @@ from app.core.scenarios.onboarding.graph import OnboardingScenarioGraph
 from app.adapters.openai_assistants.adapter import OpenAIAssistantsAdapter
 from app.core.config.bots_registry import BOTS_REGISTRY
 from app.core.knowledge_manager import KnowledgeManager
+from telethon import TelegramClient
+from telethon.sessions import MemorySession
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
 logger = logging.getLogger("API")
@@ -546,6 +551,70 @@ async def get_uploaded_files(
         ]
     }
 
+
+async def _ozon_api_probe(client_id: str, api_key: str, endpoint: str, payload: dict) -> dict:
+    """Легкая live-проверка Ozon с возвратом HTTP-статуса и текста ошибки."""
+    url = f"https://api-seller.ozon.ru{endpoint}"
+    headers = {
+        "Client-Id": client_id,
+        "Api-Key": api_key,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        connector = aiohttp.TCPConnector(ssl=False)
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                text = await response.text()
+                data = None
+                try:
+                    data = json.loads(text) if text else {}
+                except json.JSONDecodeError:
+                    data = None
+                return {
+                    "ok": response.status in (200, 201),
+                    "status_code": response.status,
+                    "text": text,
+                    "data": data,
+                }
+    except asyncio.TimeoutError:
+        return {"ok": False, "status_code": 408, "text": "TimeoutError", "data": None}
+    except Exception as e:
+        return {"ok": False, "status_code": 500, "text": str(e), "data": None}
+
+
+async def _check_telegram_live_status() -> dict:
+    api_id = cfg.get("TELETHON_API_ID")
+    api_hash = cfg.get("TELETHON_API_HASH")
+    phone = cfg.get("TELETHON_PHONE", "")
+
+    if not api_id or not api_hash:
+        return {"status": "off", "message": "Ключи не заданы"}
+
+    client = None
+    try:
+        client = TelegramClient(MemorySession(), int(api_id), api_hash)
+        await asyncio.wait_for(client.connect(), timeout=12)
+        if client.is_connected():
+            masked_phone = f"{phone[:7]}***" if phone else "скрыт"
+            return {"status": "active", "message": f"Подключен, телефон: {masked_phone}"}
+        return {"status": "warning", "message": "Telegram не подтвердил соединение"}
+    except asyncio.TimeoutError:
+        return {"status": "error", "message": "Telethon не может подключиться, идут постоянные TimeoutError"}
+    except Exception as e:
+        err = str(e)
+        err_lower = err.lower()
+        if "timeout" in err_lower:
+            return {"status": "error", "message": "Telethon не может подключиться, идут постоянные TimeoutError"}
+        return {"status": "warning", "message": f"Telegram отвечает нестабильно: {err[:120]}"}
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+
 @app.get("/api/client/info")
 @limiter.limit("30/minute")
 async def get_client_info(request: Request, current_user: User = Depends(get_current_user)):
@@ -688,19 +757,87 @@ async def check_channels_live(request: Request, current_user: User = Depends(get
     oz_key = client_cfg.get("ozon_api_key") if client_cfg else None
     if oz_id and oz_key:
         try:
-            ozon = OzonClient(client_id=oz_id, api_key=oz_key)
-            results["ozon"] = {"status": "active", "message": "Подключен"}
+            questions_probe = await _ozon_api_probe(
+                oz_id,
+                oz_key,
+                "/v1/question/list",
+                {"filter": {"status": "NEW"}, "limit": 10, "last_id": ""},
+            )
+            chats_probe = await _ozon_api_probe(
+                oz_id,
+                oz_key,
+                "/v3/chat/list",
+                {"filter": {"chat_status": "Opened"}, "limit": 10, "offset": 0},
+            )
+            reviews_probe = await _ozon_api_probe(
+                oz_id,
+                oz_key,
+                "/v1/review/list",
+                {"with_interaction_status": ["UNVIEWED", "UNANSWERED"], "limit": 10, "sort_dir": "DESC"},
+            )
+
+            questions_data = questions_probe.get("data") or {}
+            chats_data = chats_probe.get("data") or {}
+            reviews_data = reviews_probe.get("data") or {}
+
+            questions_count = len(questions_data.get("questions", []) or [])
+            chats_count = len(chats_data.get("chats", []) or [])
+            reviews_count = len(reviews_data.get("reviews", []) or [])
+
+            reviews_text = (reviews_probe.get("text") or "").lower()
+            reviews_limited = (
+                reviews_probe.get("status_code") == 403
+                or "permissiondenied" in reviews_text
+                or "subscription" in reviews_text
+            )
+
+            auth_broken = any(
+                probe.get("status_code") in (401, 403) and not (
+                    probe is reviews_probe and reviews_limited
+                )
+                for probe in (questions_probe, chats_probe)
+            )
+
+            if auth_broken:
+                results["ozon"] = {
+                    "status": "error",
+                    "unanswered_questions": 0,
+                    "unanswered_chats": 0,
+                    "unanswered_reviews": 0,
+                    "message": "Ozon API не отвечает: проверьте Client-Id и Api-Key",
+                }
+            elif reviews_limited:
+                results["ozon"] = {
+                    "status": "warning",
+                    "unanswered_questions": questions_count,
+                    "unanswered_chats": chats_count,
+                    "unanswered_reviews": 0,
+                    "message": "Отзывы не работают из-за ограничения подписки Ozon, вопросы и чаты доступны",
+                }
+            elif questions_probe.get("ok") or chats_probe.get("ok") or reviews_probe.get("ok"):
+                results["ozon"] = {
+                    "status": "active",
+                    "unanswered_questions": questions_count,
+                    "unanswered_chats": chats_count,
+                    "unanswered_reviews": reviews_count,
+                    "message": f"{questions_count} вопросов, {reviews_count} отзывов и {chats_count} чатов требуют внимания",
+                }
+            else:
+                details = questions_probe.get("text") or chats_probe.get("text") or reviews_probe.get("text") or "неизвестная ошибка"
+                results["ozon"] = {
+                    "status": "warning",
+                    "unanswered_questions": 0,
+                    "unanswered_chats": 0,
+                    "unanswered_reviews": 0,
+                    "message": f"Ozon отвечает нестабильно: {details[:120]}",
+                }
         except Exception as e:
             results["ozon"] = {"status": "error", "message": str(e)[:100]}
     else:
         results["ozon"] = {"status": "off", "message": "Ключи не заданы"}
 
     # Telegram
-    has_tg = bool(cfg.get("TELETHON_API_ID") and cfg.get("TELETHON_API_HASH"))
-    if has_tg:
-        results["telegram"] = {"status": "active", "message": f"API подключен, телефон: {cfg.get('TELETHON_PHONE', '?')[:7]}***"}
-    else:
-        results["telegram"] = {"status": "off", "message": "Ключи не заданы"}
+    results["telegram"] = await _check_telegram_live_status()
 
     return results
 

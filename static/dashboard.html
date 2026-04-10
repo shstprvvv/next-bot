@@ -75,6 +75,7 @@
         .channel-meta{font-size:12px;color:#71717a;margin-top:2px}
         .status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
         .status-badge.active{background:rgba(34,197,94,.12);color:#4ade80}
+        .status-badge.warning{background:rgba(245,158,11,.12);color:#f59e0b}
         .status-badge.setup{background:rgba(234,179,8,.12);color:#facc15}
         .status-badge.off{background:rgba(161,161,170,.1);color:#71717a}
 
@@ -499,6 +500,15 @@ async function apiGet(endpoint) {
     return r.json();
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 // --- Greeting ---
 function setGreeting(displayName) {
     const h = new Date().getHours();
@@ -547,8 +557,8 @@ function renderChannels(channels, liveStatus) {
     channels.forEach(ch => {
         const live = liveStatus ? liveStatus[ch.id] : null;
         const realStatus = live ? live.status : ch.status;
-        const statusCls = realStatus === 'active' ? 'active' : realStatus === 'error' ? 'off' : realStatus === 'setup' ? 'setup' : 'off';
-        const statusLabel = realStatus === 'active' ? 'Активен' : realStatus === 'error' ? 'Ошибка' : realStatus === 'setup' ? 'Настройка' : 'Выкл';
+        const statusCls = realStatus === 'active' ? 'active' : realStatus === 'warning' ? 'warning' : realStatus === 'error' ? 'off' : realStatus === 'setup' ? 'setup' : 'off';
+        const statusLabel = realStatus === 'active' ? 'Активен' : realStatus === 'warning' ? 'Внимание' : realStatus === 'error' ? 'Ошибка' : realStatus === 'setup' ? 'Настройка' : 'Выкл';
         const meta = live?.message || (ch.features || []).join(', ');
         const icon = channelIcons[ch.id] || `<svg class="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"/></svg>`;
         const bg = channelBg[ch.id] || '#27272a';
@@ -557,7 +567,7 @@ function renderChannels(channels, liveStatus) {
                 <div class="channel-icon" style="background:${bg}">${icon}</div>
                 <div class="channel-info">
                     <div class="channel-name">${ch.name}</div>
-                    <div class="channel-meta" style="${realStatus==='error' ? 'color:#f87171' : ''}">${meta}</div>
+                    <div class="channel-meta" style="${realStatus==='error' ? 'color:#f87171' : realStatus==='warning' ? 'color:#f59e0b' : ''}">${escapeHtml(meta)}</div>
                 </div>
                 <div class="status-badge ${statusCls}">${statusLabel}</div>
             </div>`;
@@ -588,6 +598,19 @@ async function checkChannelsLive() {
     if (wb && wb.status === 'active' && (wb.unanswered_questions > 0 || wb.unanswered_feedbacks > 0)) {
         const heroP = document.querySelector('.card.glow-blue p');
         if (heroP) heroP.innerHTML = `WB: <strong class="text-white">${wb.unanswered_questions} вопросов</strong> и <strong class="text-white">${wb.unanswered_feedbacks} отзывов</strong> ожидают ответа. Telegram подключён.`;
+    }
+
+    const issues = [];
+    const channelLabels = { wildberries: 'Wildberries', ozon: 'Ozon', telegram: 'Telegram' };
+    ['wildberries', 'ozon', 'telegram'].forEach((key) => {
+        const item = live[key];
+        if (!item || !['warning', 'error'].includes(item.status)) return;
+        issues.push(`<strong>${channelLabels[key]}</strong>: ${escapeHtml(item.message)}`);
+    });
+
+    if (issues.length && !window._dashboardIssuesShown) {
+        addMsg(`Обнаружены проблемы:<br>${issues.map(issue => `• ${issue}`).join('<br>')}`, 'bot');
+        window._dashboardIssuesShown = true;
     }
 }
 
