@@ -1,13 +1,17 @@
+import os
 import sqlite3
 import logging
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 from app.core.domain.models.marketplace_message import MarketplaceMessage
 
 logger = logging.getLogger(__name__)
 
+DATABASE_PATH = os.getenv("DATABASE_PATH", "sessions/smart_bot.db")
+
+
 class DatabaseAdapter:
-    def __init__(self, db_path: str = "smart_bot.db"):
+    def __init__(self, db_path: str = DATABASE_PATH):
         self.db_path = db_path
         self._init_db()
 
@@ -42,7 +46,7 @@ class DatabaseAdapter:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT OR REPLACE INTO marketplace_messages 
+                    INSERT OR REPLACE INTO marketplace_messages
                     (id, marketplace, message_type, item_id, product_name, text, status, created_at, answer_text, answered_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
@@ -87,25 +91,75 @@ class DatabaseAdapter:
             logger.error(f"[Database] Ошибка получения сообщения {message_id}: {e}")
             return None
 
+    def count_answered(self, category: str) -> int:
+        """Подсчёт отвеченных сообщений по категории (wb_questions, wb_feedbacks, ozon_questions, ozon_reviews)"""
+        mapping = {
+            "wb_questions": ("wildberries", "question"),
+            "wb_feedbacks": ("wildberries", "feedback"),
+            "ozon_questions": ("ozon", "question"),
+            "ozon_reviews": ("ozon", "review"),
+        }
+        if category not in mapping:
+            return 0
+        marketplace, msg_type = mapping[category]
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT COUNT(*) FROM marketplace_messages WHERE marketplace = ? AND message_type = ? AND status = 'answered'",
+                    (marketplace, msg_type)
+                )
+                return cursor.fetchone()[0]
+        except Exception as e:
+            logger.error(f"[Database] Ошибка count_answered({category}): {e}")
+            return 0
+
+    def get_recent_messages(self, limit: int = 5) -> list:
+        """Последние отвеченные сообщения для дашборда"""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT marketplace, message_type, text, answer_text, answered_at
+                       FROM marketplace_messages
+                       WHERE status = 'answered' AND answer_text IS NOT NULL
+                       ORDER BY answered_at DESC LIMIT ?""",
+                    (limit,)
+                )
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "marketplace": r[0],
+                        "type": r[1],
+                        "question": r[2][:120] if r[2] else "",
+                        "answer": r[3][:120] if r[3] else "",
+                        "answered_at": r[4],
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.error(f"[Database] Ошибка get_recent_messages: {e}")
+            return []
+
     def update_status(self, message_id: str, status: str, answer_text: str = None) -> bool:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 now = datetime.now().isoformat()
-                
+
                 if answer_text is not None:
                     cursor.execute("""
-                        UPDATE marketplace_messages 
+                        UPDATE marketplace_messages
                         SET status = ?, answer_text = ?, answered_at = ?
                         WHERE id = ?
                     """, (status, answer_text, now, message_id))
                 else:
                     cursor.execute("""
-                        UPDATE marketplace_messages 
+                        UPDATE marketplace_messages
                         SET status = ?
                         WHERE id = ?
                     """, (status, message_id))
-                    
+
                 conn.commit()
                 return True
         except Exception as e:

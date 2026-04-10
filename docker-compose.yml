@@ -10,8 +10,6 @@ services:
       - "6334:6334"
     volumes:
       - ./qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["NONE"]
 
   redis:
     image: redis:latest
@@ -30,14 +28,35 @@ services:
     volumes:
       - ./sessions:/app/sessions
       - ./knowledge_base.md:/app/knowledge_base.md
-      - ./terminals:/app/terminals # Для логов, если нужно
     env_file:
       - .env
     environment:
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
+      - DATABASE_PATH=sessions/smart_bot.db
     command: python3 -u main.py
     depends_on:
+      - qdrant
+      - redis
+
+  api:
+    build: .
+    container_name: nextbot-api
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sessions:/app/sessions
+      - ./static:/app/static
+    env_file:
+      - .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_PATH=sessions/smart_bot.db
+    command: python3 -u -m uvicorn api:app --host 0.0.0.0 --port 8080
+    depends_on:
+      - qdrant
       - redis
 
   chainlit:

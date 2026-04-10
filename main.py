@@ -65,8 +65,8 @@ async def main():
         temperature=0.0
     )
     
-    # Database (общий)
-    db_adapter = DatabaseAdapter(db_path="sessions/smart_bot.db")
+    # Database (общий, путь из DATABASE_PATH env или дефолт)
+    db_adapter = DatabaseAdapter()
 
     # Список всех запущенных воркеров и задач
     all_workers = []

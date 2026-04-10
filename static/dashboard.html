@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextBot — Панель управления</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Inter',sans-serif;background:#0f1117;color:#e4e4e7;min-height:100vh}
+
+        /* Scrollbar */
+        ::-webkit-scrollbar{width:6px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:3px}
+
+        /* Navbar */
+        .topbar{background:rgba(15,17,23,.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06)}
+
+        /* Cards */
+        .card{background:#18181b;border:1px solid #27272a;border-radius:16px;transition:border-color .3s,box-shadow .3s}
+        .card:hover{border-color:#3f3f46;box-shadow:0 0 40px rgba(99,102,241,.04)}
+
+        /* Gradient helpers */
+        .glow-blue{box-shadow:0 0 60px rgba(59,130,246,.15)}
+        .glow-purple{box-shadow:0 0 60px rgba(139,92,246,.12)}
+
+        /* ===== CHAT ===== */
+        .chat-container{display:flex;flex-direction:column;height:460px;border-radius:16px;overflow:hidden;background:#18181b;border:1px solid #27272a}
+        .chat-header{padding:16px 20px;border-bottom:1px solid #27272a;display:flex;align-items:center;gap:12px}
+        .chat-header .bot-avatar{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center}
+        .chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+
+        .msg-wrapper{display:flex;gap:10px;max-width:85%;animation:msgIn .3s ease-out}
+        .msg-wrapper.user{align-self:flex-end;flex-direction:row-reverse}
+        .msg-avatar{width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+        .msg-avatar.bot{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff}
+        .msg-avatar.user{background:#27272a;color:#a1a1aa}
+
+        .msg-content{display:flex;flex-direction:column;gap:4px}
+        .msg-bubble{padding:12px 16px;font-size:14px;line-height:1.6;border-radius:16px}
+        .msg-wrapper.bot .msg-bubble{background:#1e1e24;border:1px solid #27272a;border-top-left-radius:4px;color:#d4d4d8}
+        .msg-wrapper.user .msg-bubble{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border-top-right-radius:4px}
+        .msg-time{font-size:11px;color:#52525b;padding:0 4px}
+        .msg-wrapper.user .msg-time{text-align:right}
+
+        .typing-dots{display:flex;gap:4px;padding:12px 16px}
+        .typing-dots span{width:7px;height:7px;background:#52525b;border-radius:50%;animation:blink 1.4s infinite both}
+        .typing-dots span:nth-child(2){animation-delay:.2s}
+        .typing-dots span:nth-child(3){animation-delay:.4s}
+        @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+        @keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+        .quick-actions{display:flex;gap:8px;padding:8px 16px;overflow-x:auto;border-top:1px solid #27272a}
+        .quick-chip{white-space:nowrap;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;cursor:pointer;transition:all .2s}
+        .quick-chip:hover{background:#3b82f6;color:#fff;border-color:#3b82f6}
+
+        .chat-input-bar{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #27272a;background:#18181b}
+        .chat-input-bar input{flex:1;background:#27272a;border:1px solid #3f3f46;border-radius:12px;padding:12px 16px;color:#e4e4e7;font-size:14px;outline:none;transition:border .2s}
+        .chat-input-bar input:focus{border-color:#3b82f6}
+        .chat-input-bar input::placeholder{color:#52525b}
+        .chat-input-bar button{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border:none;border-radius:12px;padding:12px 20px;font-weight:600;cursor:pointer;transition:opacity .2s}
+        .chat-input-bar button:hover{opacity:.9}
+
+        /* ===== CHANNELS ===== */
+        .channel-card{display:flex;align-items:center;gap:14px;padding:16px 20px;background:#18181b;border:1px solid #27272a;border-radius:14px;transition:all .25s;cursor:default}
+        .channel-card:hover{border-color:#3f3f46;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+        .channel-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .channel-info{flex:1;min-width:0}
+        .channel-name{font-weight:600;font-size:14px;color:#e4e4e7}
+        .channel-meta{font-size:12px;color:#71717a;margin-top:2px}
+        .status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
+        .status-badge.active{background:rgba(34,197,94,.12);color:#4ade80}
+        .status-badge.setup{background:rgba(234,179,8,.12);color:#facc15}
+        .status-badge.off{background:rgba(161,161,170,.1);color:#71717a}
+
+        /* ===== STAT NUM ===== */
+        .stat-num{font-size:36px;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,#3b82f6,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .stat-label{font-size:13px;color:#71717a;margin-top:2px}
+
+        /* ===== TARIFF ===== */
+        .tariff-bar{height:8px;border-radius:4px;background:#27272a;overflow:hidden}
+        .tariff-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#3b82f6,#8b5cf6);transition:width .6s ease}
+
+        /* ===== TG SUPPORT ===== */
+        .tg-fab{position:fixed;bottom:24px;right:24px;z-index:100}
+        .tg-fab a{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#0088cc,#00b4d8);color:#fff;padding:14px 24px;border-radius:50px;font-weight:600;font-size:14px;text-decoration:none;box-shadow:0 8px 30px rgba(0,136,204,.3);transition:all .25s}
+        .tg-fab a:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 14px 40px rgba(0,136,204,.4)}
+
+        /* ===== RECENT DIALOGS ===== */
+        .dialog-row{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #27272a}
+        .dialog-row:last-child{border-bottom:none}
+        .dialog-avatar{width:36px;height:36px;border-radius:10px;background:#27272a;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+        .dialog-text{flex:1;min-width:0}
+        .dialog-q{font-size:13px;font-weight:500;color:#d4d4d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .dialog-a{font-size:12px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+        .dialog-time{font-size:11px;color:#52525b;white-space:nowrap}
+
+        /* ===== ANALYTICS TABS ===== */
+        .analytics-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 12px;font-size:13px;font-weight:600;color:#71717a;background:transparent;border:none;cursor:pointer;transition:all .25s;position:relative}
+        .analytics-tab:hover{color:#a1a1aa;background:rgba(255,255,255,.02)}
+        .analytics-tab.active{color:#3b82f6}
+        .analytics-tab.active::after{content:'';position:absolute;bottom:0;left:16px;right:16px;height:2px;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:2px}
+
+        @keyframes pulse-ring{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.6);opacity:0}}
+        .online-ring{position:relative}
+        .online-ring::after{content:'';position:absolute;top:-2px;left:-2px;right:-2px;bottom:-2px;border-radius:50%;border:2px solid #4ade80;animation:pulse-ring 2s infinite}
+    </style>
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="topbar sticky top-0 z-50">
+    <div class="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/20">N</div>
+            <span class="font-bold text-lg tracking-tight text-white">NextBot</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-zinc-500" id="user-email">...</span>
+            <button id="logout-btn" class="text-sm text-zinc-500 hover:text-red-400 transition-colors font-medium">Выйти</button>
+        </div>
+    </div>
+</nav>
+
+<div class="max-w-[1200px] mx-auto px-6 py-8 space-y-8">
+
+    <!-- ===== 1. GREETING ===== -->
+    <section>
+        <h1 class="text-3xl font-extrabold text-white" id="greeting">Добрый день!</h1>
+        <p class="text-zinc-500 mt-1">Вот что происходит с вашим ботом сегодня</p>
+    </section>
+
+    <!-- ===== 2. BOT HERO ===== -->
+    <section class="card overflow-hidden glow-blue">
+        <div class="bg-gradient-to-br from-blue-600/20 to-violet-600/20 p-8 relative">
+            <div class="absolute top-4 right-8 text-white/[.03] text-[80px] font-black select-none pointer-events-none leading-none">AI</div>
+            <div class="flex items-center gap-4 relative z-10">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-content justify-center text-3xl shadow-lg shadow-blue-500/20">
+                    <svg width="28" height="28" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white" id="bot-name">Мой ИИ-Бот</h2>
+                    <div class="flex items-center gap-2 text-sm text-zinc-400 mt-1">
+                        <span class="relative flex h-2.5 w-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span>
+                        Онлайн 24/7 &middot; Отвечает за ~3 сек
+                    </div>
+                </div>
+            </div>
+            <p class="text-zinc-400 text-sm mt-4 max-w-xl relative z-10">Ваш цифровой сотрудник отвечает клиентам на маркетплейсах и в мессенджерах. Обработано <strong class="text-white">152 диалога</strong> за последнюю неделю.</p>
+        </div>
+    </section>
+
+    <!-- ===== 3. CHAT ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+            Чат с ИИ-Менеджером
+        </h2>
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="bot-avatar">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>
+                </div>
+                <div>
+                    <div class="font-semibold text-sm text-white">ИИ-Менеджер</div>
+                    <div class="text-xs text-green-400">онлайн</div>
+                </div>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="msg-wrapper bot">
+                    <div class="msg-avatar bot">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>
+                    </div>
+                    <div class="msg-content">
+                        <div class="msg-bubble">Привет! Я ваш ИИ-Менеджер. Могу помочь с настройкой ботов, показать статистику или подготовить код для вставки на сайт.</div>
+                        <span class="msg-time">сейчас</span>
+                    </div>
+                </div>
+            </div>
+            <div class="quick-actions" id="quick-actions">
+                <div class="quick-chip" data-text="Покажи статистику">Статистика</div>
+                <div class="quick-chip" data-text="Список моих ботов">Мои боты</div>
+                <div class="quick-chip" data-text="Как добавить канал?">Добавить канал</div>
+                <div class="quick-chip" data-text="Дай код для вставки">Код для сайта</div>
+                <div class="quick-chip" data-text="Что нового?">Что нового?</div>
+            </div>
+            <form class="chat-input-bar" id="chat-form">
+                <input type="text" id="chat-input" placeholder="Напишите сообщение..." autocomplete="off">
+                <button type="submit">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ===== 4. CHANNELS ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            Подключенные каналы
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="channels-grid">
+            <!-- Wildberries -->
+            <div class="channel-card">
+                <div class="channel-icon" style="background:#2d1654">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M2 6l3.5 12h1.8L9.5 10l2.2 8h1.8L17 10l2.2 8h1.8L24.5 6h-2l-2.8 10L17.5 6h-1.8L13.5 16 11.2 6H9.5L7.2 16 4.5 6H2z" fill="#cb11ab"/></svg>
+                </div>
+                <div class="channel-info">
+                    <div class="channel-name">Wildberries</div>
+                    <div class="channel-meta">86 диалогов</div>
+                </div>
+                <div class="status-badge active">Активен</div>
+            </div>
+            <!-- Ozon -->
+            <div class="channel-card">
+                <div class="channel-icon" style="background:#002f6c">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 14.5c-3.04 0-5.5-2.46-5.5-5.5S8.96 6.5 12 6.5s5.5 2.46 5.5 5.5-2.46 5.5-5.5 5.5z" fill="#005bff"/></svg>
+                </div>
+                <div class="channel-info">
+                    <div class="channel-name">Ozon</div>
+                    <div class="channel-meta">42 диалога</div>
+                </div>
+                <div class="status-badge active">Активен</div>
+            </div>
+            <!-- Telegram -->
+            <div class="channel-card">
+                <div class="channel-icon" style="background:#0c2e4a">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#29b6f6"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161l-1.97 9.293c-.145.658-.537.818-1.084.508l-3-2.211-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.929z"/></svg>
+                </div>
+                <div class="channel-info">
+                    <div class="channel-name">Telegram</div>
+                    <div class="channel-meta">Настройка...</div>
+                </div>
+                <div class="status-badge setup">Настройка</div>
+            </div>
+            <!-- Add Channel -->
+            <div class="channel-card" style="border-style:dashed;cursor:pointer" id="add-channel-btn">
+                <div class="channel-icon" style="background:#27272a">
+                    <svg class="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                </div>
+                <div class="channel-info">
+                    <div class="channel-name text-zinc-500">Добавить канал</div>
+                    <div class="channel-meta">WhatsApp, ВКонтакте...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 5. STATS ROW ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Статистика за 7 дней
+        </h2>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="card p-6 text-center">
+                <div class="stat-num">152</div>
+                <div class="stat-label">Диалогов</div>
+            </div>
+            <div class="card p-6 text-center">
+                <div class="stat-num">1.2k</div>
+                <div class="stat-label">Сообщений</div>
+            </div>
+            <div class="card p-6 text-center">
+                <div class="stat-num">~3с</div>
+                <div class="stat-label">Среднее время</div>
+            </div>
+            <div class="card p-6 text-center">
+                <div class="stat-num">4.8</div>
+                <div class="stat-label">Оценка</div>
+            </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Area chart -->
+            <div class="card p-5 lg:col-span-2">
+                <div class="text-sm font-semibold text-zinc-400 mb-2">Динамика диалогов</div>
+                <div id="chart-area"></div>
+            </div>
+            <!-- Radial -->
+            <div class="card p-5 flex flex-col items-center justify-center">
+                <div class="text-sm font-semibold text-zinc-400 mb-2">Автоответы</div>
+                <div id="chart-radial"></div>
+            </div>
+        </div>
+
+        <!-- Donut + Bar row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div class="card p-5">
+                <div class="text-sm font-semibold text-zinc-400 mb-2">По каналам</div>
+                <div id="chart-donut"></div>
+            </div>
+            <div class="card p-5">
+                <div class="text-sm font-semibold text-zinc-400 mb-2">Вопросы vs Отзывы</div>
+                <div id="chart-bar"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 6. SWITCHABLE ANALYTICS ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Расширенная аналитика
+        </h2>
+        <div class="card overflow-hidden">
+            <!-- Tabs -->
+            <div class="flex border-b border-zinc-800" id="analytics-tabs">
+                <button class="analytics-tab active" data-tab="analytics">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    Аналитика
+                </button>
+                <button class="analytics-tab" data-tab="ads">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+                    Реклама
+                </button>
+                <button class="analytics-tab" data-tab="views">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    Показы
+                </button>
+                <button class="analytics-tab" data-tab="conversion">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    Конверсия
+                </button>
+            </div>
+            <!-- Summary row -->
+            <div class="grid grid-cols-3 divide-x divide-zinc-800 border-b border-zinc-800" id="analytics-summary">
+                <div class="p-5 text-center">
+                    <div class="text-2xl font-extrabold text-white" id="sum-1">—</div>
+                    <div class="text-xs text-zinc-500 mt-1" id="sum-1-label">—</div>
+                </div>
+                <div class="p-5 text-center">
+                    <div class="text-2xl font-extrabold text-white" id="sum-2">—</div>
+                    <div class="text-xs text-zinc-500 mt-1" id="sum-2-label">—</div>
+                </div>
+                <div class="p-5 text-center">
+                    <div class="text-2xl font-extrabold text-emerald-400" id="sum-3">—</div>
+                    <div class="text-xs text-zinc-500 mt-1" id="sum-3-label">—</div>
+                </div>
+            </div>
+            <!-- Chart -->
+            <div class="p-5">
+                <div id="chart-switchable"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 7. RECENT DIALOGS ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"/></svg>
+            Последние диалоги
+        </h2>
+        <div class="card px-6 py-2" id="dialogs-container">
+            <div class="dialog-row">
+                <div class="dialog-avatar">👩</div>
+                <div class="dialog-text">
+                    <div class="dialog-q">Когда будет доставка кроссовок Nike Air Max?</div>
+                    <div class="dialog-a">Бот: Ваш заказ отправлен 7 апреля, ожидайте 10-11 апреля.</div>
+                </div>
+                <div class="dialog-time">2 мин</div>
+            </div>
+            <div class="dialog-row">
+                <div class="dialog-avatar">👨</div>
+                <div class="dialog-text">
+                    <div class="dialog-q">Есть ли размер 43 у Adidas Ultraboost?</div>
+                    <div class="dialog-a">Бот: Да, размер 43 есть в наличии. Хотите оформить заказ?</div>
+                </div>
+                <div class="dialog-time">18 мин</div>
+            </div>
+            <div class="dialog-row">
+                <div class="dialog-avatar">👩</div>
+                <div class="dialog-text">
+                    <div class="dialog-q">Можно вернуть товар если не подошёл размер?</div>
+                    <div class="dialog-a">Бот: Конечно, возврат возможен в течение 14 дней.</div>
+                </div>
+                <div class="dialog-time">1 ч</div>
+            </div>
+            <div class="dialog-row">
+                <div class="dialog-avatar">👨</div>
+                <div class="dialog-text">
+                    <div class="dialog-q">Почему статус заказа не обновляется?</div>
+                    <div class="dialog-a">Бот: Статус обновится после передачи в службу доставки.</div>
+                </div>
+                <div class="dialog-time">3 ч</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 7. TARIFF ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Ваш тариф
+        </h2>
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <span class="text-sm font-bold text-violet-400">PRO</span>
+                    <span class="text-sm text-zinc-500 ml-2">3 990 ₽ / мес</span>
+                </div>
+                <button class="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">Управление</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+                <div>
+                    <div class="text-xs text-zinc-500 mb-1">Товаров загружено</div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="text-zinc-300 font-medium">34 / безлимит</span>
+                    </div>
+                    <div class="tariff-bar"><div class="tariff-fill" style="width:34%"></div></div>
+                </div>
+                <div>
+                    <div class="text-xs text-zinc-500 mb-1">Каналы</div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="text-zinc-300 font-medium">2 / все</span>
+                    </div>
+                    <div class="tariff-bar"><div class="tariff-fill" style="width:66%"></div></div>
+                </div>
+                <div>
+                    <div class="text-xs text-zinc-500 mb-1">Диалогов в мес.</div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                        <span class="text-zinc-300 font-medium">152 / безлимит</span>
+                    </div>
+                    <div class="tariff-bar"><div class="tariff-fill" style="width:15%"></div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 8. KNOWLEDGE BASE ===== -->
+    <section>
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            База знаний
+        </h2>
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <p class="text-sm text-zinc-500">Загруженные файлы для обучения бота</p>
+                <label class="text-sm font-semibold text-blue-400 hover:text-blue-300 cursor-pointer transition-colors">
+                    + Загрузить файл
+                    <input type="file" class="hidden" id="file-upload" accept=".pdf,.txt,.md,.xlsx,.xls,.csv">
+                </label>
+            </div>
+            <div id="files-list" class="space-y-2">
+                <div class="text-sm text-zinc-600 text-center py-8">Файлы пока не загружены</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="h-24"></div>
+</div>
+
+<!-- ===== TG SUPPORT FAB ===== -->
+<div class="tg-fab">
+    <a href="https://t.me/nextbot_support" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161l-1.97 9.293c-.145.658-.537.818-1.084.508l-3-2.211-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.929z"/></svg>
+        Техподдержка
+    </a>
+</div>
+
+<script src="/static/js/config.js"></script>
+<script>
+const API = window.NEXTBOT_CONFIG.API_URL;
+const token = localStorage.getItem('nextbot_token');
+let BOT_ID = 'next_client'; // default, will be overridden by /api/client/info
+let sessionId = localStorage.getItem('nextbot_session') || crypto.randomUUID();
+localStorage.setItem('nextbot_session', sessionId);
+
+// --- Auth ---
+let userEmail = '';
+if (!token) {
+    window.location.href = '/static/login.html';
+} else {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.exp * 1000 < Date.now()) throw new Error('expired');
+        userEmail = payload.sub;
+        document.getElementById('user-email').textContent = userEmail;
+    } catch (e) {
+        localStorage.removeItem('nextbot_token');
+        window.location.href = '/static/login.html';
+    }
+}
+
+// --- Helpers ---
+async function apiGet(endpoint) {
+    const r = await fetch(`${API}${endpoint}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (r.status === 401) { localStorage.removeItem('nextbot_token'); window.location.href = '/static/login.html'; return null; }
+    if (!r.ok) return null;
+    return r.json();
+}
+
+// --- Greeting ---
+function setGreeting(displayName) {
+    const h = new Date().getHours();
+    let g = 'Доброй ночи';
+    if (h >= 5 && h < 12) g = 'Доброе утро';
+    else if (h >= 12 && h < 18) g = 'Добрый день';
+    else if (h >= 18 && h < 23) g = 'Добрый вечер';
+    const name = displayName || (userEmail ? userEmail.split('@')[0] : '');
+    document.getElementById('greeting').textContent = g + (name ? ', ' + name.charAt(0).toUpperCase() + name.slice(1) : '') + '!';
+}
+setGreeting();
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+    localStorage.removeItem('nextbot_token');
+    localStorage.removeItem('nextbot_session');
+    window.location.href = '/static/login.html';
+});
+
+// --- Load client info ---
+const channelIcons = {
+    wildberries: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M2 6l3.5 12h1.8L9.5 10l2.2 8h1.8L17 10l2.2 8h1.8L24.5 6h-2l-2.8 10L17.5 6h-1.8L13.5 16 11.2 6H9.5L7.2 16 4.5 6H2z" fill="#cb11ab"/></svg>`,
+    ozon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 14.5c-3.04 0-5.5-2.46-5.5-5.5S8.96 6.5 12 6.5s5.5 2.46 5.5 5.5-2.46 5.5-5.5 5.5z" fill="#005bff"/></svg>`,
+    telegram: `<svg width="22" height="22" viewBox="0 0 24 24" fill="#29b6f6"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161l-1.97 9.293c-.145.658-.537.818-1.084.508l-3-2.211-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.929z"/></svg>`,
+};
+const channelBg = { wildberries: '#2d1654', ozon: '#002f6c', telegram: '#0c2e4a' };
+
+async function loadClientInfo() {
+    const info = await apiGet('/api/client/info');
+    if (!info) return;
+
+    if (info.bot_id) BOT_ID = info.bot_id;
+    if (info.display_name) setGreeting(info.display_name);
+    if (info.name) document.getElementById('bot-name').textContent = info.name + ' ИИ-Бот';
+
+    // First render channels from config (instant)
+    renderChannels(info.channels || []);
+    initChat();
+
+    // Then check live status (async, updates badges)
+    checkChannelsLive();
+}
+
+function renderChannels(channels, liveStatus) {
+    const grid = document.getElementById('channels-grid');
+    grid.innerHTML = '';
+    channels.forEach(ch => {
+        const live = liveStatus ? liveStatus[ch.id] : null;
+        const realStatus = live ? live.status : ch.status;
+        const statusCls = realStatus === 'active' ? 'active' : realStatus === 'error' ? 'off' : realStatus === 'setup' ? 'setup' : 'off';
+        const statusLabel = realStatus === 'active' ? 'Активен' : realStatus === 'error' ? 'Ошибка' : realStatus === 'setup' ? 'Настройка' : 'Выкл';
+        const meta = live?.message || (ch.features || []).join(', ');
+        const icon = channelIcons[ch.id] || `<svg class="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"/></svg>`;
+        const bg = channelBg[ch.id] || '#27272a';
+        grid.innerHTML += `
+            <div class="channel-card" id="ch-${ch.id}">
+                <div class="channel-icon" style="background:${bg}">${icon}</div>
+                <div class="channel-info">
+                    <div class="channel-name">${ch.name}</div>
+                    <div class="channel-meta" style="${realStatus==='error' ? 'color:#f87171' : ''}">${meta}</div>
+                </div>
+                <div class="status-badge ${statusCls}">${statusLabel}</div>
+            </div>`;
+    });
+    grid.innerHTML += `
+        <div class="channel-card" style="border-style:dashed;cursor:pointer" id="add-channel-btn">
+            <div class="channel-icon" style="background:#27272a">
+                <svg class="w-6 h-6 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </div>
+            <div class="channel-info">
+                <div class="channel-name text-zinc-500">Добавить канал</div>
+                <div class="channel-meta">WhatsApp, ВКонтакте...</div>
+            </div>
+        </div>`;
+
+    // Store channels for re-render
+    window._channels = channels;
+}
+
+async function checkChannelsLive() {
+    const live = await apiGet('/api/client/channels/check');
+    if (!live || !window._channels) return;
+
+    renderChannels(window._channels, live);
+
+    // Update hero description with live data
+    const wb = live.wildberries;
+    if (wb && wb.status === 'active' && (wb.unanswered_questions > 0 || wb.unanswered_feedbacks > 0)) {
+        const heroP = document.querySelector('.card.glow-blue p');
+        if (heroP) heroP.innerHTML = `WB: <strong class="text-white">${wb.unanswered_questions} вопросов</strong> и <strong class="text-white">${wb.unanswered_feedbacks} отзывов</strong> ожидают ответа. Telegram подключён.`;
+    }
+}
+
+// --- Load stats from API ---
+async function loadStats() {
+    const stats = await apiGet('/api/client/stats');
+    if (!stats) return;
+
+    const total = stats.total_dialogs || 0;
+    const wbQ = stats.wb_questions_answered || 0;
+    const wbF = stats.wb_feedbacks_answered || 0;
+    const ozQ = stats.ozon_questions_answered || 0;
+    const ozR = stats.ozon_reviews_answered || 0;
+    const files = stats.knowledge_files || 0;
+
+    const nums = document.querySelectorAll('.stat-num');
+    const labels = document.querySelectorAll('.stat-label');
+    nums[0].textContent = total || '0';
+    labels[0].textContent = 'Всего ответов';
+    nums[1].textContent = wbQ + wbF;
+    labels[1].textContent = 'WB ответов';
+    nums[2].textContent = ozQ + ozR;
+    labels[2].textContent = 'Ozon ответов';
+    nums[3].textContent = files;
+    labels[3].textContent = 'Файлов в базе';
+
+    if (window.donutChart) {
+        window.donutChart.updateSeries([wbQ + wbF, ozQ + ozR, 0]);
+    }
+}
+
+// --- Load recent dialogs from API ---
+async function loadDialogs() {
+    const data = await apiGet('/api/client/dialogs');
+    if (!data || !data.dialogs || data.dialogs.length === 0) return;
+
+    const container = document.getElementById('dialogs-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const mpIcons = { wildberries: '🟣', ozon: '🔵', telegram: '✈️' };
+
+    data.dialogs.forEach(d => {
+        const icon = mpIcons[d.marketplace] || '💬';
+        const timeStr = d.answered_at ? new Date(d.answered_at).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '';
+        container.innerHTML += `
+            <div class="dialog-row">
+                <div class="dialog-avatar">${icon}</div>
+                <div class="dialog-text">
+                    <div class="dialog-q">${d.question}</div>
+                    <div class="dialog-a">Бот: ${d.answer}</div>
+                </div>
+                <div class="dialog-time">${timeStr}</div>
+            </div>`;
+    });
+}
+
+// --- Boot ---
+loadClientInfo();
+loadStats();
+loadDialogs();
+
+// ===== CHAT =====
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const chatMessages = document.getElementById('chat-messages');
+
+function timeNow() {
+    return new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+}
+
+function addMsg(text, who) {
+    const w = document.createElement('div');
+    w.className = 'msg-wrapper ' + who;
+
+    const av = document.createElement('div');
+    av.className = 'msg-avatar ' + who;
+    if (who === 'bot') {
+        av.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>';
+    } else {
+        av.textContent = userEmail ? userEmail.charAt(0).toUpperCase() : 'U';
+    }
+
+    const c = document.createElement('div');
+    c.className = 'msg-content';
+    const b = document.createElement('div');
+    b.className = 'msg-bubble';
+    b.innerHTML = text;
+    const t = document.createElement('span');
+    t.className = 'msg-time';
+    t.textContent = timeNow();
+    c.appendChild(b);
+    c.appendChild(t);
+
+    w.appendChild(av);
+    w.appendChild(c);
+    chatMessages.appendChild(w);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function showTyping() {
+    const w = document.createElement('div');
+    w.className = 'msg-wrapper bot';
+    w.id = 'typing';
+    w.innerHTML = `
+        <div class="msg-avatar bot"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg></div>
+        <div class="msg-content"><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
+    chatMessages.appendChild(w);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+function hideTyping() { document.getElementById('typing')?.remove(); }
+
+async function apiPost(endpoint, body) {
+    const r = await fetch(`${API}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(body),
+    });
+    if (r.status === 401) { localStorage.removeItem('nextbot_token'); window.location.href = '/static/login.html'; return null; }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Ошибка ' + r.status); }
+    return r.json();
+}
+
+async function sendMsg(text) {
+    addMsg(text, 'user');
+    chatInput.value = '';
+    chatInput.disabled = true;
+    showTyping();
+    try {
+        const data = await apiPost('/api/chat', { bot_id: BOT_ID, message: text, session_id: sessionId });
+        hideTyping();
+        if (data?.reply) addMsg(data.reply, 'bot');
+    } catch (err) {
+        hideTyping();
+        addMsg('Ошибка: ' + err.message, 'bot');
+    } finally {
+        chatInput.disabled = false;
+        chatInput.focus();
+    }
+}
+
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    if (text) sendMsg(text);
+});
+
+document.querySelectorAll('.quick-chip').forEach(chip => {
+    chip.addEventListener('click', () => sendMsg(chip.dataset.text));
+});
+
+async function initChat() {
+    try {
+        const data = await apiPost('/api/chat/init', { bot_id: BOT_ID, session_id: sessionId });
+        if (data?.reply) { chatMessages.innerHTML = ''; addMsg(data.reply, 'bot'); }
+    } catch (e) { console.error('Init error:', e); }
+}
+
+// ===== APEXCHARTS =====
+const chartTheme = { mode: 'dark', palette: 'palette1' };
+const chartFont = { fontFamily: 'Inter, sans-serif' };
+
+// 1. Area Chart
+new ApexCharts(document.querySelector('#chart-area'), {
+    chart: { type: 'area', height: 260, background: 'transparent', toolbar: { show: false }, ...chartFont },
+    theme: chartTheme,
+    series: [
+        { name: 'Вопросы', data: [18, 25, 22, 30, 28, 15, 14] },
+        { name: 'Отзывы', data: [5, 8, 6, 12, 9, 4, 3] },
+    ],
+    xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
+    stroke: { curve: 'smooth', width: 3 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.45, opacityTo: 0.05, stops: [0, 100] } },
+    colors: ['#3b82f6', '#8b5cf6'],
+    grid: { borderColor: '#27272a', strokeDashArray: 4 },
+    dataLabels: { enabled: false },
+    tooltip: { theme: 'dark' },
+}).render();
+
+// 2. Radial (Autoresponse %)
+new ApexCharts(document.querySelector('#chart-radial'), {
+    chart: { type: 'radialBar', height: 220, background: 'transparent', ...chartFont },
+    theme: chartTheme,
+    series: [98],
+    plotOptions: {
+        radialBar: {
+            hollow: { size: '60%' },
+            track: { background: '#27272a' },
+            dataLabels: {
+                name: { show: true, color: '#71717a', fontSize: '13px', offsetY: -10 },
+                value: { show: true, color: '#e4e4e7', fontSize: '28px', fontWeight: 800, offsetY: 4, formatter: v => v + '%' },
+            }
+        }
+    },
+    labels: ['Автоответы'],
+    colors: ['#22c55e'],
+    stroke: { lineCap: 'round' },
+}).render();
+
+// 3. Donut (by channel)
+window.donutChart = new ApexCharts(document.querySelector('#chart-donut'), {
+    chart: { type: 'donut', height: 260, background: 'transparent', ...chartFont },
+    theme: chartTheme,
+    series: [86, 42, 24],
+    labels: ['Wildberries', 'Ozon', 'Telegram'],
+    colors: ['#cb11ab', '#005bff', '#29b6f6'],
+    plotOptions: { pie: { donut: { size: '60%', labels: { show: true, total: { show: true, label: 'Всего', color: '#71717a', formatter: w => w.globals.seriesTotals.reduce((a, b) => a + b, 0) } } } } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom', labels: { colors: '#a1a1aa' } },
+    stroke: { show: false },
+});
+window.donutChart.render();
+
+// 4. Bar chart
+new ApexCharts(document.querySelector('#chart-bar'), {
+    chart: { type: 'bar', height: 260, background: 'transparent', toolbar: { show: false }, ...chartFont },
+    theme: chartTheme,
+    series: [
+        { name: 'Вопросы', data: [18, 25, 22, 30, 28, 15, 14] },
+        { name: 'Отзывы', data: [5, 8, 6, 12, 9, 4, 3] },
+    ],
+    xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
+    colors: ['#3b82f6', '#a78bfa'],
+    plotOptions: { bar: { borderRadius: 6, columnWidth: '50%' } },
+    grid: { borderColor: '#27272a', strokeDashArray: 4 },
+    dataLabels: { enabled: false },
+    tooltip: { theme: 'dark' },
+    legend: { position: 'bottom', labels: { colors: '#a1a1aa' } },
+}).render();
+
+// ===== SWITCHABLE ANALYTICS CHART =====
+const tabData = {
+    analytics: {
+        sums: [
+            { val: '152', label: 'Диалогов' },
+            { val: '1 247', label: 'Сообщений' },
+            { val: '+12%', label: 'Рост за неделю' },
+        ],
+        series: [
+            { name: 'Диалоги', data: [18, 25, 22, 30, 28, 15, 14] },
+            { name: 'Закрытые', data: [16, 23, 20, 28, 26, 14, 13] },
+        ],
+        colors: ['#3b82f6', '#22c55e'],
+        type: 'area',
+    },
+    ads: {
+        sums: [
+            { val: '38 400 ₽', label: 'Потрачено' },
+            { val: '12 640', label: 'Кликов' },
+            { val: '3.04 ₽', label: 'Цена клика' },
+        ],
+        series: [
+            { name: 'Расход, ₽', data: [4200, 5800, 6100, 5400, 6300, 5900, 4700] },
+            { name: 'Клики', data: [1400, 1900, 2100, 1800, 2200, 1900, 1340] },
+        ],
+        colors: ['#f43f5e', '#f59e0b'],
+        type: 'area',
+    },
+    views: {
+        sums: [
+            { val: '84.3k', label: 'Показов' },
+            { val: '12.6k', label: 'Переходов' },
+            { val: '14.9%', label: 'CTR' },
+        ],
+        series: [
+            { name: 'Показы', data: [9200, 12400, 13100, 11800, 14200, 12900, 10700] },
+            { name: 'Переходы', data: [1300, 1900, 2000, 1700, 2200, 1800, 1700] },
+        ],
+        colors: ['#8b5cf6', '#06b6d4'],
+        type: 'bar',
+    },
+    conversion: {
+        sums: [
+            { val: '3.2%', label: 'CR общая' },
+            { val: '487', label: 'Заявок' },
+            { val: '+0.4%', label: 'Рост CR' },
+        ],
+        series: [
+            { name: 'Конверсия, %', data: [2.8, 3.1, 3.4, 2.9, 3.5, 3.6, 3.2] },
+        ],
+        colors: ['#10b981'],
+        type: 'line',
+    },
+};
+
+let switchChart = null;
+function renderSwitchable(key) {
+    const d = tabData[key];
+    document.getElementById('sum-1').textContent = d.sums[0].val;
+    document.getElementById('sum-1-label').textContent = d.sums[0].label;
+    document.getElementById('sum-2').textContent = d.sums[1].val;
+    document.getElementById('sum-2-label').textContent = d.sums[1].label;
+    document.getElementById('sum-3').textContent = d.sums[2].val;
+    document.getElementById('sum-3-label').textContent = d.sums[2].label;
+
+    if (switchChart) switchChart.destroy();
+
+    const opts = {
+        chart: { type: d.type, height: 300, background: 'transparent', toolbar: { show: false }, fontFamily: 'Inter, sans-serif', animations: { enabled: true, easing: 'easeinout', speed: 600 } },
+        theme: { mode: 'dark' },
+        series: d.series,
+        xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
+        colors: d.colors,
+        stroke: { curve: 'smooth', width: d.type === 'bar' ? 0 : 3 },
+        grid: { borderColor: '#27272a', strokeDashArray: 4 },
+        dataLabels: { enabled: false },
+        tooltip: { theme: 'dark' },
+        legend: { position: 'bottom', labels: { colors: '#a1a1aa' } },
+    };
+
+    if (d.type === 'area') {
+        opts.fill = { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } };
+    }
+    if (d.type === 'bar') {
+        opts.plotOptions = { bar: { borderRadius: 6, columnWidth: '45%' } };
+    }
+    if (d.type === 'line') {
+        opts.markers = { size: 5, strokeWidth: 0 };
+    }
+
+    switchChart = new ApexCharts(document.querySelector('#chart-switchable'), opts);
+    switchChart.render();
+}
+
+document.querySelectorAll('.analytics-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        renderSwitchable(tab.dataset.tab);
+    });
+});
+renderSwitchable('analytics');
+
+// ===== FILE UPLOAD =====
+document.getElementById('file-upload').addEventListener('change', async function() {
+    const file = this.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('bot_id', BOT_ID);
+    const list = document.getElementById('files-list');
+    list.innerHTML = '<div class="text-sm text-blue-400 text-center py-6">Загрузка...</div>';
+    try {
+        const r = await fetch(`${API}/api/knowledge/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: fd,
+        });
+        const data = await r.json();
+        if (r.ok) {
+            list.innerHTML = `<div class="flex items-center justify-between p-4 rounded-lg" style="background:#132e1a;border:1px solid #22543d">
+                <span class="text-sm font-medium text-green-400">${file.name}</span>
+                <span class="text-xs text-green-600">${data.chunks_added} чанков</span>
+            </div>`;
+        } else {
+            list.innerHTML = '<div class="text-sm text-red-400 text-center py-6">' + (data.detail || 'Ошибка') + '</div>';
+        }
+    } catch (err) {
+        list.innerHTML = '<div class="text-sm text-red-400 text-center py-6">Ошибка: ' + err.message + '</div>';
+    }
+});
+</script>
+</body>
+</html>

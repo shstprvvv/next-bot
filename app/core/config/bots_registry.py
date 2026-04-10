@@ -1,6 +1,41 @@
 from typing import Dict, Any
 
 BOTS_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "next_client": {
+        "name": "NEXT",
+        "client_id": "next",
+        "collection_name": "smart_bot_knowledge",
+        "greeting": "Привет! Я ИИ-ассистент бренда NEXT. Могу помочь с вопросами по смарт ТВ-приставкам, показать статистику каналов или настроить интеграции. Что вас интересует?",
+        "channels": {
+            "wildberries": {"enabled": True, "label": "Wildberries", "features": ["questions", "feedbacks", "chats"]},
+            "ozon": {"enabled": True, "label": "Ozon", "features": ["questions", "reviews", "chats"]},
+            "telegram": {"enabled": True, "label": "Telegram", "features": ["qa"]},
+        },
+        "prompts": {
+            "router": """Ты — маршрутизатор бренда NEXT. Проанализируй сообщение и верни ОДНО слово:
+- 'sales' (если спрашивает про цены, покупку, характеристики приставок NEXT, сравнение)
+- 'support' (если проблема с приставкой, не работает, брак, возврат, настройка)
+- 'unknown' (если непонятно или это просто "привет")
+
+Сообщение: {last_message}
+Ответ:""",
+
+            "sales": """Ты — менеджер по продажам бренда NEXT (смарт ТВ-приставки).
+Расскажи про преимущества: 4K, Android TV, простая настройка, 1 год гарантии.
+Отвечай вежливо, профессионально и по делу. Не упоминай что ты ИИ.
+
+Информация из базы знаний:
+{context}""",
+
+            "support": """Ты — специалист техподдержки бренда NEXT.
+Помоги клиенту решить проблему с приставкой. Используй только информацию из контекста.
+Если проблема не решается, предложи возврат по гарантии.
+
+Информация из базы знаний:
+{context}"""
+        }
+    },
+
     "svyaz_main": {
         "name": "Связь",
         "collection_name": "messenger_knowledge",

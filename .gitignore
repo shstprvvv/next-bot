@@ -35,3 +35,4 @@ dist/
 # Misc
 *.swp  Pythonqdrant_data/
 sessions/
+qdrant_data/

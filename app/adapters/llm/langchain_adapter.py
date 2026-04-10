@@ -22,10 +22,8 @@ class LangChainLLMAdapter(LLMClient):
             model=model_name,
             temperature=temperature,
             timeout=timeout_s,
-            # Ретраи делаем централизованно ниже, чтобы не было "двойных" повторов.
             max_retries=0,
         )
-        # Инициализируем нативный клиент OpenAI для работы с аудио (Whisper)
         self.openai_async_client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,

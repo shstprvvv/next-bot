@@ -1,25 +1,53 @@
-telethon==1.34.0
-python-dotenv==1.0.1
-langchain==0.3.26
-langchain-community==0.3.27
-langchain-openai==0.3.28
-langchain-text-splitters==0.3.8
+# Core
+python-dotenv>=1.0.1
+fastapi>=0.115.14
+uvicorn>=0.39.0
+redis>=5.0.0
+
+# Auth & DB
+sqlalchemy>=2.0.0
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+alembic>=1.15.0
+
+# Rate limiting
+slowapi>=0.1.9
+
+# LLM & AI
+langchain>=0.3.26
+langchain-community>=0.3.27
+langchain-openai>=0.3.28
+langchain-text-splitters>=0.3.8
 openai>=1.86.0
+langgraph>=0.6.11
+langgraph-checkpoint>=2.1.2
+langgraph-prebuilt>=0.6.5
+langgraph-sdk>=0.2.9
+langfuse>=2.53.0
+
+# Vector stores & retrieval
 qdrant-client>=1.16.1
 langchain-qdrant>=0.2.1
+tiktoken>=0.8.0
+nltk>=3.9.1
+unstructured[md]>=0.16.1
+
+# Channels
+telethon>=1.34.0
+requests>=2.32.3
+httpx>=0.27.0
+
+# Utilities
 tenacity>=8.5.0
-requests==2.32.3
-unstructured[md]==0.16.1
-tiktoken==0.8.0
-nltk==3.9.1
-httpx==0.27.0
-python-dateutil==2.9.0.post0
-langfuse>=2.53.0
+python-dateutil>=2.9.0.post0
+
+# Dev & demo
 chainlit>=1.3.0
-langgraph==0.6.11
-langgraph-checkpoint==2.1.2
-langgraph-prebuilt==0.6.5
-langgraph-sdk==0.2.9
-fastapi==0.115.14
-uvicorn==0.39.0
-redis>=5.0.0
+
+# Testing (install with: pip install -r requirements.txt)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+python-multipart>=0.0.9
+pypdf>=4.1.0
+pandas>=2.2.2
+openpyxl>=3.1.2
