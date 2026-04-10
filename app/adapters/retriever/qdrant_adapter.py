@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 

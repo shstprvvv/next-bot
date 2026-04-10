@@ -3,7 +3,8 @@ import logging
 from typing import List
 from fastapi import UploadFile
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.adapters.retriever.qdrant_adapter import QdrantRetrieverAdapter
 from app.core.config.bots_registry import BOTS_REGISTRY
@@ -67,7 +68,6 @@ class KnowledgeManager:
 
     def _load_document(self, file_path: str, filename: str) -> List:
         """Выбирает правильный лоадер в зависимости от расширения файла."""
-        from langchain.schema import Document
         import pandas as pd
         
         ext = filename.lower().split('.')[-1]
@@ -112,8 +112,6 @@ class KnowledgeManager:
         Загружает товары из Wildberries и добавляет их в базу знаний.
         """
         from app.adapters.channels.wildberries.client import WBClient
-        from langchain.schema import Document
-        
         if bot_id not in BOTS_REGISTRY:
             raise ValueError(f"Бот {bot_id} не найден в реестре.")
             
@@ -192,8 +190,6 @@ class KnowledgeManager:
         Загружает товары из Ozon и добавляет их в базу знаний.
         """
         from app.adapters.channels.ozon.client import OzonClient
-        from langchain.schema import Document
-        
         if bot_id not in BOTS_REGISTRY:
             raise ValueError(f"Бот {bot_id} не найден в реестре.")
             

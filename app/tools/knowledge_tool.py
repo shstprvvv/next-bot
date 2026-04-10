@@ -1,11 +1,11 @@
 import logging
 import os
 from langchain.tools import Tool
-from langchain.text_splitter import MarkdownHeaderTextSplitter
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import TextLoader
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def create_retriever(api_key: str, base_url: str = None):

@@ -36,7 +36,7 @@ def rebuild_qdrant_index():
 
     logger.info("Загрузка данных из %s...", KNOWLEDGE_BASE_PATH)
     from langchain_community.document_loaders import TextLoader
-    from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+    from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
     from langchain_openai import OpenAIEmbeddings
     from langchain_qdrant import QdrantVectorStore
     from qdrant_client import QdrantClient
