@@ -22,6 +22,12 @@ env/
 *.session
 *.session-journal
 
+# Данные и логи
+qdrant_data/
+redis_data/
+sessions/
+*.log
+
 # Docker
 Dockerfile
 .dockerignore
