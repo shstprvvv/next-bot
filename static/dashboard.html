@@ -462,23 +462,23 @@
                 <div>
                     <div class="text-xs text-zinc-500 mb-1">Товаров загружено</div>
                     <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="text-zinc-300 font-medium">34 / безлимит</span>
+                        <span class="text-zinc-300 font-medium" id="tariff-files">0 / безлимит</span>
                     </div>
-                    <div class="tariff-bar"><div class="tariff-fill" style="width:34%"></div></div>
+                    <div class="tariff-bar"><div class="tariff-fill" id="tariff-files-fill" style="width:0%"></div></div>
                 </div>
                 <div>
                     <div class="text-xs text-zinc-500 mb-1">Каналы</div>
                     <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="text-zinc-300 font-medium">2 / все</span>
+                        <span class="text-zinc-300 font-medium" id="tariff-channels">0 / все</span>
                     </div>
-                    <div class="tariff-bar"><div class="tariff-fill" style="width:66%"></div></div>
+                    <div class="tariff-bar"><div class="tariff-fill" id="tariff-channels-fill" style="width:0%"></div></div>
                 </div>
                 <div>
                     <div class="text-xs text-zinc-500 mb-1">Диалогов в мес.</div>
                     <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="text-zinc-300 font-medium">152 / безлимит</span>
+                        <span class="text-zinc-300 font-medium" id="tariff-dialogs">0 / безлимит</span>
                     </div>
-                    <div class="tariff-bar"><div class="tariff-fill" style="width:15%"></div></div>
+                    <div class="tariff-bar"><div class="tariff-fill" id="tariff-dialogs-fill" style="width:0%"></div></div>
                 </div>
             </div>
         </div>
@@ -634,6 +634,15 @@ function renderChannels(channels, liveStatus) {
 
     // Store channels for re-render
     window._channels = channels;
+    
+    // Update tariff channels
+    const tariffChannels = document.getElementById('tariff-channels');
+    const tariffChannelsFill = document.getElementById('tariff-channels-fill');
+    if (tariffChannels) {
+        const activeCount = channels.filter(c => c.status === 'active').length;
+        tariffChannels.textContent = `${activeCount} / все`;
+        tariffChannelsFill.style.width = Math.min(100, (activeCount / 3) * 100) + '%';
+    }
 }
 
 async function checkChannelsLive() {
@@ -678,17 +687,71 @@ async function loadStats() {
 
     const nums = document.querySelectorAll('.stat-num');
     const labels = document.querySelectorAll('.stat-label');
-    nums[0].textContent = total || '0';
-    labels[0].textContent = 'Всего ответов';
-    nums[1].textContent = wbQ + wbF;
-    labels[1].textContent = 'WB ответов';
-    nums[2].textContent = ozQ + ozR;
-    labels[2].textContent = 'Ozon ответов';
-    nums[3].textContent = files;
-    labels[3].textContent = 'Файлов в базе';
+    if (nums.length >= 4) {
+        nums[0].textContent = total || '0';
+        labels[0].textContent = 'Всего ответов';
+        nums[1].textContent = wbQ + wbF;
+        labels[1].textContent = 'WB ответов';
+        nums[2].textContent = ozQ + ozR;
+        labels[2].textContent = 'Ozon ответов';
+        nums[3].textContent = files;
+        labels[3].textContent = 'Файлов в базе';
+    }
 
     if (window.donutChart) {
         window.donutChart.updateSeries([wbQ + wbF, ozQ + ozR, 0]);
+    }
+    
+    if (stats.daily_stats && window.areaChart && window.barChart) {
+        const ds = stats.daily_stats;
+        const shortDates = ds.dates.map(d => {
+            const parts = d.split('-');
+            return `${parts[2]}.${parts[1]}`;
+        });
+        
+        window.areaChart.updateOptions({
+            xaxis: { categories: shortDates }
+        });
+        window.areaChart.updateSeries([
+            { name: 'Вопросы', data: ds.questions },
+            { name: 'Отзывы', data: ds.feedbacks }
+        ]);
+        
+        window.barChart.updateOptions({
+            xaxis: { categories: shortDates }
+        });
+        window.barChart.updateSeries([
+            { name: 'Вопросы', data: ds.questions },
+            { name: 'Отзывы', data: ds.feedbacks }
+        ]);
+        
+        // Обновляем аналитику
+        if (window.tabData) {
+            window.tabData.analytics.series = [
+                { name: 'Вопросы', data: ds.questions },
+                { name: 'Отзывы', data: ds.feedbacks }
+            ];
+            window.tabData.analytics.sums[0].val = total.toString();
+            window.tabData.analytics.sums[1].val = (total * 2).toString(); // Примерная оценка сообщений
+            
+            if (document.querySelector('.analytics-tab.active').dataset.tab === 'analytics') {
+                renderSwitchable('analytics');
+            }
+        }
+    }
+
+    // Обновляем тариф
+    const tariffFiles = document.getElementById('tariff-files');
+    const tariffFilesFill = document.getElementById('tariff-files-fill');
+    if (tariffFiles) {
+        tariffFiles.textContent = `${files} / безлимит`;
+        tariffFilesFill.style.width = Math.min(100, files * 5) + '%';
+    }
+    const tariffDialogs = document.getElementById('tariff-dialogs');
+    const tariffDialogsFill = document.getElementById('tariff-dialogs-fill');
+    if (tariffDialogs) {
+        tariffDialogs.textContent = `${total} / безлимит`;
+        tariffDialogsFill.style.width = Math.min(100, (total / 1000) * 100) + '%';
     }
 }
 
@@ -921,12 +984,12 @@ const chartTheme = { mode: 'dark', palette: 'palette1' };
 const chartFont = { fontFamily: 'Inter, sans-serif' };
 
 // 1. Area Chart
-new ApexCharts(document.querySelector('#chart-area'), {
+window.areaChart = new ApexCharts(document.querySelector('#chart-area'), {
     chart: { type: 'area', height: 260, background: 'transparent', toolbar: { show: false }, ...chartFont },
     theme: chartTheme,
     series: [
-        { name: 'Вопросы', data: [18, 25, 22, 30, 28, 15, 14] },
-        { name: 'Отзывы', data: [5, 8, 6, 12, 9, 4, 3] },
+        { name: 'Вопросы', data: [0, 0, 0, 0, 0, 0, 0] },
+        { name: 'Отзывы', data: [0, 0, 0, 0, 0, 0, 0] },
     ],
     xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
     stroke: { curve: 'smooth', width: 3 },
@@ -935,7 +998,8 @@ new ApexCharts(document.querySelector('#chart-area'), {
     grid: { borderColor: '#27272a', strokeDashArray: 4 },
     dataLabels: { enabled: false },
     tooltip: { theme: 'dark' },
-}).render();
+});
+window.areaChart.render();
 
 // 2. Radial (Autoresponse %)
 new ApexCharts(document.querySelector('#chart-radial'), {
@@ -972,12 +1036,12 @@ window.donutChart = new ApexCharts(document.querySelector('#chart-donut'), {
 window.donutChart.render();
 
 // 4. Bar chart
-new ApexCharts(document.querySelector('#chart-bar'), {
+window.barChart = new ApexCharts(document.querySelector('#chart-bar'), {
     chart: { type: 'bar', height: 260, background: 'transparent', toolbar: { show: false }, ...chartFont },
     theme: chartTheme,
     series: [
-        { name: 'Вопросы', data: [18, 25, 22, 30, 28, 15, 14] },
-        { name: 'Отзывы', data: [5, 8, 6, 12, 9, 4, 3] },
+        { name: 'Вопросы', data: [0, 0, 0, 0, 0, 0, 0] },
+        { name: 'Отзывы', data: [0, 0, 0, 0, 0, 0, 0] },
     ],
     xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
     colors: ['#3b82f6', '#a78bfa'],
@@ -986,19 +1050,20 @@ new ApexCharts(document.querySelector('#chart-bar'), {
     dataLabels: { enabled: false },
     tooltip: { theme: 'dark' },
     legend: { position: 'bottom', labels: { colors: '#a1a1aa' } },
-}).render();
+});
+window.barChart.render();
 
 // ===== SWITCHABLE ANALYTICS CHART =====
-const tabData = {
+window.tabData = {
     analytics: {
         sums: [
-            { val: '152', label: 'Диалогов' },
-            { val: '1 247', label: 'Сообщений' },
-            { val: '+12%', label: 'Рост за неделю' },
+            { val: '0', label: 'Диалогов' },
+            { val: '0', label: 'Сообщений' },
+            { val: '—', label: 'Рост за неделю' },
         ],
         series: [
-            { name: 'Диалоги', data: [18, 25, 22, 30, 28, 15, 14] },
-            { name: 'Закрытые', data: [16, 23, 20, 28, 26, 14, 13] },
+            { name: 'Вопросы', data: [0, 0, 0, 0, 0, 0, 0] },
+            { name: 'Отзывы', data: [0, 0, 0, 0, 0, 0, 0] },
         ],
         colors: ['#3b82f6', '#22c55e'],
         type: 'area',
@@ -1045,7 +1110,7 @@ const tabData = {
 
 let switchChart = null;
 function renderSwitchable(key) {
-    const d = tabData[key];
+    const d = window.tabData[key];
     document.getElementById('sum-1').textContent = d.sums[0].val;
     document.getElementById('sum-1-label').textContent = d.sums[0].label;
     document.getElementById('sum-2').textContent = d.sums[1].val;

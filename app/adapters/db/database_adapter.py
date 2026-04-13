@@ -141,6 +141,46 @@ class DatabaseAdapter:
             logger.error(f"[Database] Ошибка get_recent_messages: {e}")
             return []
 
+    def get_daily_stats(self, days: int = 7) -> dict:
+        """Статистика по дням за последние N дней"""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT date(answered_at) as d, message_type, COUNT(*)
+                       FROM marketplace_messages
+                       WHERE status = 'answered' AND answered_at >= date('now', ?)
+                       GROUP BY d, message_type
+                       ORDER BY d ASC""",
+                    (f'-{days} days',)
+                )
+                rows = cursor.fetchall()
+                
+                # Инициализация пустых данных за последние 7 дней
+                from datetime import datetime, timedelta
+                today = datetime.now()
+                dates = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(days-1, -1, -1)]
+                
+                stats = {
+                    "dates": dates,
+                    "questions": [0] * days,
+                    "feedbacks": [0] * days,
+                }
+                
+                for r in rows:
+                    date_str, msg_type, count = r
+                    if date_str in dates:
+                        idx = dates.index(date_str)
+                        if msg_type == 'question':
+                            stats["questions"][idx] += count
+                        elif msg_type in ('feedback', 'review'):
+                            stats["feedbacks"][idx] += count
+                            
+                return stats
+        except Exception as e:
+            logger.error(f"[Database] Ошибка get_daily_stats: {e}")
+            return {"dates": [], "questions": [], "feedbacks": []}
+
     def update_status(self, message_id: str, status: str, answer_text: str = None) -> bool:
         try:
             with self._get_connection() as conn:

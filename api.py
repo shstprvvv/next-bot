@@ -681,6 +681,7 @@ async def get_client_stats(request: Request, current_user: User = Depends(get_cu
         "ozon_reviews_answered": 0,
         "total_dialogs": 0,
         "channels_active": 0,
+        "daily_stats": {"dates": [], "questions": [], "feedbacks": []}
     }
 
     try:
@@ -694,6 +695,7 @@ async def get_client_stats(request: Request, current_user: User = Depends(get_cu
         stats["ozon_questions_answered"] = oz_q
         stats["ozon_reviews_answered"] = oz_r
         stats["total_dialogs"] = wb_q + wb_f + oz_q + oz_r
+        stats["daily_stats"] = db_adapter.get_daily_stats(7)
     except Exception as e:
         logger.warning(f"Не удалось получить статистику из БД: {e}")
 
