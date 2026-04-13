@@ -409,38 +409,7 @@
             Последние диалоги
         </h2>
         <div class="card px-6 py-2" id="dialogs-container">
-            <div class="dialog-row">
-                <div class="dialog-avatar">👩</div>
-                <div class="dialog-text">
-                    <div class="dialog-q">Когда будет доставка кроссовок Nike Air Max?</div>
-                    <div class="dialog-a">Бот: Ваш заказ отправлен 7 апреля, ожидайте 10-11 апреля.</div>
-                </div>
-                <div class="dialog-time">2 мин</div>
-            </div>
-            <div class="dialog-row">
-                <div class="dialog-avatar">👨</div>
-                <div class="dialog-text">
-                    <div class="dialog-q">Есть ли размер 43 у Adidas Ultraboost?</div>
-                    <div class="dialog-a">Бот: Да, размер 43 есть в наличии. Хотите оформить заказ?</div>
-                </div>
-                <div class="dialog-time">18 мин</div>
-            </div>
-            <div class="dialog-row">
-                <div class="dialog-avatar">👩</div>
-                <div class="dialog-text">
-                    <div class="dialog-q">Можно вернуть товар если не подошёл размер?</div>
-                    <div class="dialog-a">Бот: Конечно, возврат возможен в течение 14 дней.</div>
-                </div>
-                <div class="dialog-time">1 ч</div>
-            </div>
-            <div class="dialog-row">
-                <div class="dialog-avatar">👨</div>
-                <div class="dialog-text">
-                    <div class="dialog-q">Почему статус заказа не обновляется?</div>
-                    <div class="dialog-a">Бот: Статус обновится после передачи в службу доставки.</div>
-                </div>
-                <div class="dialog-time">3 ч</div>
-            </div>
+            <div class="text-sm text-zinc-500 text-center py-6">Загрузка...</div>
         </div>
     </section>
 
@@ -757,11 +726,14 @@ async function loadStats() {
 
 // --- Load recent dialogs from API ---
 async function loadDialogs() {
-    const data = await apiGet('/api/client/dialogs');
-    if (!data || !data.dialogs || data.dialogs.length === 0) return;
-
     const container = document.getElementById('dialogs-container');
     if (!container) return;
+
+    const data = await apiGet('/api/client/dialogs');
+    if (!data || !data.dialogs || data.dialogs.length === 0) {
+        container.innerHTML = '<div class="text-sm text-zinc-500 text-center py-6">Пока нет отвеченных диалогов</div>';
+        return;
+    }
 
     container.innerHTML = '';
     const mpIcons = { wildberries: '🟣', ozon: '🔵', telegram: '✈️' };
@@ -773,8 +745,8 @@ async function loadDialogs() {
             <div class="dialog-row">
                 <div class="dialog-avatar">${icon}</div>
                 <div class="dialog-text">
-                    <div class="dialog-q">${d.question}</div>
-                    <div class="dialog-a">Бот: ${d.answer}</div>
+                    <div class="dialog-q">${escapeHtml(d.question)}</div>
+                    <div class="dialog-a">Бот: ${escapeHtml(d.answer)}</div>
                 </div>
                 <div class="dialog-time">${timeStr}</div>
             </div>`;
