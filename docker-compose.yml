@@ -48,13 +48,15 @@ services:
     volumes:
       - ./sessions:/app/sessions
       - ./static:/app/static
+      - ./app:/app/app
+      - ./api.py:/app/api.py
     env_file:
       - .env
     environment:
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=sessions/smart_bot.db
-    command: python3 -u -m uvicorn api:app --host 0.0.0.0 --port 8080
+    command: python3 -u -m uvicorn api:app --host 0.0.0.0 --port 8080 --reload
     depends_on:
       - qdrant
       - redis

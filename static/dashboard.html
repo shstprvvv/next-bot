@@ -29,84 +29,94 @@
         .glow-blue{box-shadow:0 0 60px rgba(59,130,246,.15)}
         .glow-purple{box-shadow:0 0 60px rgba(139,92,246,.12)}
 
-        /* ===== CHAT ===== */
+        /* ===== CHAT (shadcn / assistant-ui) ===== */
         .chat-section{position:relative}
-        .chat-container{display:flex;flex-direction:column;height:72vh;min-height:520px;max-height:820px;border-radius:20px;overflow:hidden;background:#18181b;border:1px solid rgba(59,130,246,.15);position:relative;transition:all .4s cubic-bezier(.4,0,.2,1)}
-        .chat-container::before{content:'';position:absolute;inset:-1px;border-radius:21px;padding:1px;background:linear-gradient(135deg,#3b82f6,#8b5cf6,#06b6d4,#3b82f6);background-size:300% 300%;animation:borderGlow 8s ease infinite;-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.45}
-        @keyframes borderGlow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+        .chat-container{display:flex;flex-direction:column;height:72vh;min-height:520px;max-height:820px;border-radius:16px;overflow:hidden;background:#09090b;border:1px solid #27272a;position:relative;transition:all .3s ease}
         .chat-container.fullscreen{position:fixed;inset:0;z-index:200;height:100vh;max-height:100vh;border-radius:0}
-        .chat-container.fullscreen::before{display:none}
 
-        .chat-header{padding:16px 24px;border-bottom:1px solid #27272a;display:flex;align-items:center;gap:12px;background:rgba(24,24,27,.85);backdrop-filter:blur(20px);z-index:1}
-        .chat-header .bot-avatar{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(99,102,241,.3)}
-        .chat-header-actions{margin-left:auto;display:flex;gap:8px}
-        .chat-header-btn{width:36px;height:36px;border-radius:10px;background:#27272a;border:1px solid #3f3f46;color:#a1a1aa;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
-        .chat-header-btn:hover{background:#3f3f46;color:#fff}
+        .chat-header{padding:14px 20px;border-bottom:1px solid #27272a;display:flex;align-items:center;gap:12px;background:#09090b;z-index:1}
+        .chat-header .bot-avatar{width:36px;height:36px;border-radius:50%;background:#18181b;border:1px solid #27272a;display:flex;align-items:center;justify-content:center}
+        .chat-header-info{flex:1}
+        .chat-header-actions{display:flex;gap:6px}
+        .chat-header-btn{width:32px;height:32px;border-radius:8px;background:transparent;border:1px solid #27272a;color:#71717a;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+        .chat-header-btn:hover{background:#18181b;color:#e4e4e7;border-color:#3f3f46}
 
-        .chat-messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+        .chat-messages{flex:1;overflow-y:auto;padding:0;display:flex;flex-direction:column}
 
-        /* Welcome */
-        .chat-welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center}
-        .chat-welcome-avatar{width:76px;height:76px;border-radius:24px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 40px rgba(99,102,241,.3);margin-bottom:24px;animation:float 4s ease-in-out infinite}
-        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-        .chat-welcome h3{font-size:24px;font-weight:800;color:#fff;margin-bottom:8px;letter-spacing:-.3px}
-        .chat-welcome p{font-size:14px;color:#71717a;max-width:420px;line-height:1.7}
-        .suggestion-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:32px;width:100%;max-width:500px}
-        @media(max-width:480px){.suggestion-grid{grid-template-columns:1fr}}
-        .suggestion-card{display:flex;align-items:flex-start;gap:12px;padding:16px;background:#1e1e24;border:1px solid #27272a;border-radius:14px;cursor:pointer;transition:all .25s;text-align:left}
-        .suggestion-card:hover{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.05);transform:translateY(-2px);box-shadow:0 4px 24px rgba(59,130,246,.1)}
-        .suggestion-card .s-icon{width:36px;height:36px;border-radius:10px;background:#27272a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
-        .suggestion-card .s-text{font-size:13px;font-weight:600;color:#d4d4d8;line-height:1.4}
-        .suggestion-card .s-hint{font-size:11px;color:#52525b;margin-top:3px}
+        /* Messages — shadcn thread style */
+        .msg-wrapper{display:flex;gap:12px;padding:20px 24px;animation:msgIn .25s ease-out;border-bottom:1px solid rgba(39,39,42,.5)}
+        .msg-wrapper:last-child{border-bottom:none}
+        .msg-wrapper.user{flex-direction:row-reverse}
+        .msg-wrapper.user .msg-content{align-items:flex-end}
+        .msg-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;margin-top:2px}
+        .msg-avatar.bot{background:#18181b;border:1px solid #27272a;color:#a1a1aa}
+        .msg-avatar.user{background:#3b82f6;color:#fff}
 
-        /* Messages */
-        .msg-wrapper{display:flex;gap:10px;max-width:82%;animation:msgIn .35s cubic-bezier(.4,0,.2,1)}
-        .msg-wrapper.user{align-self:flex-end;flex-direction:row-reverse}
-        .msg-avatar{width:34px;height:34px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
-        .msg-avatar.bot{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff}
-        .msg-avatar.user{background:#27272a;color:#a1a1aa}
+        .msg-content{display:flex;flex-direction:column;gap:4px;position:relative;flex:1;min-width:0}
+        .msg-sender{font-size:12px;font-weight:600;color:#71717a;margin-bottom:2px}
+        .msg-bubble{font-size:14px;line-height:1.7;color:#d4d4d8}
+        .msg-wrapper.user .msg-bubble{background:#18181b;border:1px solid #27272a;border-radius:12px;padding:10px 16px;max-width:75%;color:#e4e4e7}
+        .msg-time{font-size:10px;color:#3f3f46;padding:0}
 
-        .msg-content{display:flex;flex-direction:column;gap:4px;position:relative}
-        .msg-bubble{padding:14px 18px;font-size:14px;line-height:1.7;border-radius:18px}
-        .msg-wrapper.bot .msg-bubble{background:#1e1e24;border:1px solid #27272a;border-top-left-radius:4px;color:#d4d4d8}
-        .msg-wrapper.user .msg-bubble{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border-top-right-radius:4px}
-        .msg-time{font-size:11px;color:#52525b;padding:0 4px}
-        .msg-wrapper.user .msg-time{text-align:right}
-
-        .msg-copy{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:8px;background:rgba(39,39,42,.9);border:1px solid #3f3f46;color:#71717a;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:all .2s}
+        .msg-copy{position:absolute;top:0;right:0;width:26px;height:26px;border-radius:6px;background:#18181b;border:1px solid #27272a;color:#52525b;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:all .15s}
         .msg-content:hover .msg-copy{opacity:1}
-        .msg-copy:hover{background:#3f3f46;color:#fff}
+        .msg-copy:hover{background:#27272a;color:#e4e4e7}
 
         .msg-bubble p{margin:0 0 8px}.msg-bubble p:last-child{margin-bottom:0}
-        .msg-bubble code{background:rgba(59,130,246,.1);padding:2px 6px;border-radius:4px;font-size:13px;font-family:'SF Mono',ui-monospace,monospace}
-        .msg-bubble pre{background:#0f1117;border:1px solid #27272a;border-radius:10px;padding:14px;margin:8px 0;overflow-x:auto}
-        .msg-bubble pre code{background:none;padding:0}
+        .msg-bubble code{background:#18181b;border:1px solid #27272a;padding:2px 6px;border-radius:4px;font-size:13px;font-family:'SF Mono',ui-monospace,monospace;color:#a1a1aa}
+        .msg-bubble pre{background:#0a0a0c;border:1px solid #27272a;border-radius:8px;padding:14px;margin:8px 0;overflow-x:auto}
+        .msg-bubble pre code{background:none;padding:0;border:none}
         .msg-bubble ul,.msg-bubble ol{padding-left:20px;margin:8px 0}.msg-bubble li{margin:4px 0}
-        .msg-bubble strong{color:#fff}
-        .msg-bubble a{color:#60a5fa;text-decoration:underline}
+        .msg-bubble strong{color:#fafafa}
+        .msg-bubble a{color:#60a5fa;text-decoration:none}.msg-bubble a:hover{text-decoration:underline}
 
-        .streaming-cursor::after{content:'▊';animation:cursorBlink 1s infinite;color:#3b82f6;font-weight:300;margin-left:1px}
+        /* Product cards */
+        .product-cards{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+        .product-card{background:#0a0a0c;border:1px solid #27272a;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;transition:all .15s}
+        .product-card:hover{border-color:#3f3f46}
+        .product-card-icon{width:36px;height:36px;border-radius:8px;background:#18181b;border:1px solid #27272a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+        .product-card-info{flex:1;min-width:0}
+        .product-card-name{font-size:13px;font-weight:600;color:#e4e4e7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .product-card-meta{font-size:11px;color:#52525b;margin-top:2px}
+        .product-card-meta span{margin-right:10px}
+        .product-card-actions{display:flex;gap:4px;flex-shrink:0}
+        .product-action-btn{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:500;border:1px solid #27272a;cursor:pointer;transition:all .15s;white-space:nowrap;background:transparent}
+        .product-action-btn.edit{color:#a1a1aa}
+        .product-action-btn.edit:hover{background:#18181b;color:#e4e4e7;border-color:#3f3f46}
+        .product-action-btn.delete{color:#71717a}
+        .product-action-btn.delete:hover{background:rgba(239,68,68,.08);color:#f87171;border-color:rgba(239,68,68,.2)}
+        .product-action-btn svg{width:12px;height:12px}
+        @media(max-width:480px){
+            .product-card{flex-wrap:wrap}
+            .product-card-actions{width:100%;justify-content:flex-end;margin-top:4px}
+        }
+
+        .streaming-cursor::after{content:'▊';animation:cursorBlink 1s infinite;color:#71717a;font-weight:300;margin-left:1px}
         @keyframes cursorBlink{0%,100%{opacity:1}50%{opacity:0}}
 
-        .typing-dots{display:flex;gap:5px;padding:14px 18px}
-        .typing-dots span{width:8px;height:8px;background:#52525b;border-radius:50%;animation:blink 1.4s infinite both}
+        .typing-dots{display:flex;gap:4px;padding:4px 0}
+        .typing-dots span{width:6px;height:6px;background:#3f3f46;border-radius:50%;animation:blink 1.4s infinite both}
         .typing-dots span:nth-child(2){animation-delay:.2s}
         .typing-dots span:nth-child(3){animation-delay:.4s}
         @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
-        @keyframes msgIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-        .quick-actions{display:flex;gap:8px;padding:10px 20px;overflow-x:auto;border-top:1px solid #27272a}
-        .quick-chip{white-space:nowrap;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:500;background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;cursor:pointer;transition:all .2s}
-        .quick-chip:hover{background:#3b82f6;color:#fff;border-color:#3b82f6}
+        /* Inline suggestions after greeting */
+        .suggestions-inline{display:flex;flex-wrap:wrap;gap:6px;padding:4px 24px 16px 64px;animation:msgIn .25s ease-out}
+        .suggestion-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #27272a;border-radius:9px;background:transparent;color:#a1a1aa;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif}
+        .suggestion-chip:hover{background:#18181b;border-color:#3f3f46;color:#e4e4e7}
 
-        .chat-input-bar{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #27272a;background:rgba(24,24,27,.9);backdrop-filter:blur(10px)}
-        .chat-input-bar input{flex:1;background:#1e1e24;border:1px solid #3f3f46;border-radius:14px;padding:14px 18px;color:#e4e4e7;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:all .2s}
-        .chat-input-bar input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+        /* Input bar — shadcn style */
+        .chat-input-bar{display:flex;align-items:center;gap:0;padding:12px 16px;border-top:1px solid #27272a;background:#09090b}
+        .chat-input-wrap{flex:1;display:flex;align-items:center;background:#09090b;border:1px solid #27272a;border-radius:12px;padding:0 4px 0 16px;transition:border-color .15s}
+        .chat-input-wrap:focus-within{border-color:#3f3f46}
+        .chat-input-bar input{flex:1;background:transparent;border:none;padding:13px 8px 13px 0;color:#fafafa;font-size:14px;font-family:'Inter',sans-serif;outline:none}
         .chat-input-bar input::placeholder{color:#52525b}
-        .chat-send-btn{width:48px;height:48px;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border:none;border-radius:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;box-shadow:0 4px 15px rgba(99,102,241,.3);flex-shrink:0}
-        .chat-send-btn:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(99,102,241,.4)}
-        .chat-send-btn:active{transform:scale(.95)}
-        .chat-send-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+        .chat-send-btn{width:36px;height:36px;background:transparent;color:#52525b;border:none;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0;margin:2px}
+        .chat-send-btn:hover:not(:disabled){background:#18181b;color:#fafafa}
+        .chat-send-btn:disabled{opacity:.3;cursor:not-allowed}
+        .chat-send-btn.has-text{color:#fafafa;background:#fafafa;color:#09090b}
+        .chat-send-btn.has-text:hover{opacity:.9}
         @media(max-width:640px){.chat-container{height:65vh;min-height:400px}}
 
         /* ===== CHANNELS ===== */
@@ -144,12 +154,6 @@
         .dialog-a{font-size:12px;color:#52525b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
         .dialog-time{font-size:11px;color:#52525b;white-space:nowrap}
 
-        /* ===== ANALYTICS TABS ===== */
-        .analytics-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 12px;font-size:13px;font-weight:600;color:#71717a;background:transparent;border:none;cursor:pointer;transition:all .25s;position:relative}
-        .analytics-tab:hover{color:#a1a1aa;background:rgba(255,255,255,.02)}
-        .analytics-tab.active{color:#3b82f6}
-        .analytics-tab.active::after{content:'';position:absolute;bottom:0;left:16px;right:16px;height:2px;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:2px}
-
         @keyframes pulse-ring{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.6);opacity:0}}
         .online-ring{position:relative}
         .online-ring::after{content:'';position:absolute;top:-2px;left:-2px;right:-2px;bottom:-2px;border-radius:50%;border:2px solid #4ade80;animation:pulse-ring 2s infinite}
@@ -179,71 +183,35 @@
         <p class="text-zinc-500 mt-1">Вот что происходит с вашим ботом сегодня</p>
     </section>
 
-    <!-- ===== 2. CHAT (HERO) ===== -->
+    <!-- ===== 2. CHAT (shadcn / assistant-ui) ===== -->
     <section class="chat-section">
         <div class="chat-container" id="chat-container">
             <div class="chat-header">
                 <div class="bot-avatar">
-                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#71717a" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#71717a"/><circle cx="14.5" cy="11" r="1.5" fill="#71717a"/></svg>
                 </div>
-                <div>
-                    <div class="font-semibold text-sm text-white" id="chat-bot-name">ИИ-Менеджер</div>
-                    <div class="flex items-center gap-1.5 text-xs text-green-400">
-                        <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
-                        онлайн
-                    </div>
+                <div class="chat-header-info">
+                    <div class="text-[13px] font-semibold text-zinc-200" id="chat-bot-name">ИИ-Менеджер</div>
                 </div>
                 <div class="chat-header-actions">
                     <button class="chat-header-btn" id="chat-clear-btn" title="Новый чат">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                     </button>
                     <button class="chat-header-btn" id="chat-fullscreen-btn" title="Развернуть">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
                     </button>
                 </div>
             </div>
 
-            <div class="chat-welcome" id="chat-welcome">
-                <div class="chat-welcome-avatar">
-                    <svg width="38" height="38" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>
-                </div>
-                <h3>Чем могу помочь?</h3>
-                <p>Я ваш ИИ-ассистент. Могу показать статистику, помочь с настройкой каналов или ответить на любые вопросы по боту.</p>
-                <div class="suggestion-grid">
-                    <div class="suggestion-card" data-text="Покажи статистику за неделю">
-                        <div class="s-icon">📊</div>
-                        <div><div class="s-text">Статистика</div><div class="s-hint">за последнюю неделю</div></div>
-                    </div>
-                    <div class="suggestion-card" data-text="Список моих ботов">
-                        <div class="s-icon">🤖</div>
-                        <div><div class="s-text">Мои боты</div><div class="s-hint">список и статусы</div></div>
-                    </div>
-                    <div class="suggestion-card" data-text="Как подключить новый канал?">
-                        <div class="s-icon">🔗</div>
-                        <div><div class="s-text">Добавить канал</div><div class="s-hint">пошаговая инструкция</div></div>
-                    </div>
-                    <div class="suggestion-card" data-text="Дай код виджета для сайта">
-                        <div class="s-icon">💻</div>
-                        <div><div class="s-text">Код для сайта</div><div class="s-hint">виджет чат-бота</div></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="chat-messages" id="chat-messages" style="display:none"></div>
-
-            <div class="quick-actions" id="quick-actions" style="display:none">
-                <div class="quick-chip" data-text="Покажи статистику">📊 Статистика</div>
-                <div class="quick-chip" data-text="Список моих ботов">🤖 Мои боты</div>
-                <div class="quick-chip" data-text="Как добавить канал?">🔗 Канал</div>
-                <div class="quick-chip" data-text="Дай код для вставки">💻 Код для сайта</div>
-                <div class="quick-chip" data-text="Что нового?">✨ Что нового?</div>
-            </div>
+            <div class="chat-messages" id="chat-messages"></div>
 
             <form class="chat-input-bar" id="chat-form">
-                <input type="text" id="chat-input" placeholder="Напишите сообщение..." autocomplete="off">
-                <button type="submit" class="chat-send-btn" id="chat-send-btn">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                </button>
+                <div class="chat-input-wrap">
+                    <input type="text" id="chat-input" placeholder="Написать сообщение..." autocomplete="off">
+                    <button type="submit" class="chat-send-btn" id="chat-send-btn">
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
             </form>
         </div>
     </section>
@@ -354,54 +322,6 @@
         </div>
     </section>
 
-    <!-- ===== 6. SWITCHABLE ANALYTICS ===== -->
-    <section>
-        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Расширенная аналитика
-        </h2>
-        <div class="card overflow-hidden">
-            <!-- Tabs -->
-            <div class="flex border-b border-zinc-800" id="analytics-tabs">
-                <button class="analytics-tab active" data-tab="analytics">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    Аналитика
-                </button>
-                <button class="analytics-tab" data-tab="ads">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
-                    Реклама
-                </button>
-                <button class="analytics-tab" data-tab="views">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                    Показы
-                </button>
-                <button class="analytics-tab" data-tab="conversion">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                    Конверсия
-                </button>
-            </div>
-            <!-- Summary row -->
-            <div class="grid grid-cols-3 divide-x divide-zinc-800 border-b border-zinc-800" id="analytics-summary">
-                <div class="p-5 text-center">
-                    <div class="text-2xl font-extrabold text-white" id="sum-1">—</div>
-                    <div class="text-xs text-zinc-500 mt-1" id="sum-1-label">—</div>
-                </div>
-                <div class="p-5 text-center">
-                    <div class="text-2xl font-extrabold text-white" id="sum-2">—</div>
-                    <div class="text-xs text-zinc-500 mt-1" id="sum-2-label">—</div>
-                </div>
-                <div class="p-5 text-center">
-                    <div class="text-2xl font-extrabold text-emerald-400" id="sum-3">—</div>
-                    <div class="text-xs text-zinc-500 mt-1" id="sum-3-label">—</div>
-                </div>
-            </div>
-            <!-- Chart -->
-            <div class="p-5">
-                <div id="chart-switchable"></div>
-            </div>
-        </div>
-    </section>
-
     <!-- ===== 7. RECENT DIALOGS ===== -->
     <section>
         <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -460,12 +380,21 @@
             База знаний
         </h2>
         <div class="card p-6">
-            <div class="flex items-center justify-between mb-4">
-                <p class="text-sm text-zinc-500">Загруженные файлы для обучения бота</p>
-                <label class="text-sm font-semibold text-blue-400 hover:text-blue-300 cursor-pointer transition-colors">
-                    + Загрузить файл
-                    <input type="file" class="hidden" id="file-upload" accept=".pdf,.txt,.md,.xlsx,.xls,.csv">
-                </label>
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+                <p class="text-sm text-zinc-500">Управление товарами и файлами для обучения бота</p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <button id="export-excel-btn" class="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
+                        ↓ Скачать товары (Excel)
+                    </button>
+                    <label class="text-sm font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer transition-colors bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
+                        ↑ Загрузить товары (Excel)
+                        <input type="file" class="hidden" id="import-excel-upload" accept=".xlsx,.xls">
+                    </label>
+                    <label class="text-sm font-semibold text-blue-400 hover:text-blue-300 cursor-pointer transition-colors bg-blue-400/10 px-3 py-1.5 rounded-lg border border-blue-400/20">
+                        + Обычный файл
+                        <input type="file" class="hidden" id="file-upload" accept=".pdf,.txt,.md,.csv">
+                    </label>
+                </div>
             </div>
             <div id="files-list" class="space-y-2">
                 <div class="text-sm text-zinc-600 text-center py-8">Файлы пока не загружены</div>
@@ -557,7 +486,8 @@ async function loadClientInfo() {
     const info = await apiGet('/api/client/info');
     if (!info) return;
 
-    if (info.bot_id) BOT_ID = info.bot_id;
+    // if (info.bot_id) BOT_ID = info.bot_id; // We want the admin chat to always be admin_bot
+    BOT_ID = 'admin_bot';
     if (info.display_name) setGreeting(info.display_name);
     if (info.name) document.getElementById('chat-bot-name').textContent = info.name + ' ИИ-Бот';
 
@@ -694,19 +624,6 @@ async function loadStats() {
             { name: 'Отзывы', data: ds.feedbacks }
         ]);
         
-        // Обновляем аналитику
-        if (window.tabData) {
-            window.tabData.analytics.series = [
-                { name: 'Вопросы', data: ds.questions },
-                { name: 'Отзывы', data: ds.feedbacks }
-            ];
-            window.tabData.analytics.sums[0].val = total.toString();
-            window.tabData.analytics.sums[1].val = (total * 2).toString(); // Примерная оценка сообщений
-            
-            if (document.querySelector('.analytics-tab.active').dataset.tab === 'analytics') {
-                renderSwitchable('analytics');
-            }
-        }
     }
 
     // Обновляем тариф
@@ -763,7 +680,6 @@ const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatMessages = document.getElementById('chat-messages');
 let chatStarted = false;
-let initReply = null;
 
 function timeNow() {
     return new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
@@ -783,13 +699,42 @@ function renderMarkdown(text) {
 function startChat() {
     if (chatStarted) return;
     chatStarted = true;
-    document.getElementById('chat-welcome').style.display = 'none';
-    chatMessages.style.display = 'flex';
-    document.getElementById('quick-actions').style.display = 'flex';
-    if (initReply) {
-        addMsg(initReply, 'bot');
-        initReply = null;
-    }
+}
+
+async function playGreeting() {
+    startChat();
+
+    showTyping();
+    await new Promise(r => setTimeout(r, 500 + Math.random() * 300));
+    hideTyping();
+    await addMsgStreaming('Привет! 👋', 'bot');
+
+    showTyping();
+    await new Promise(r => setTimeout(r, 900 + Math.random() * 400));
+    hideTyping();
+    await addMsgStreaming('Я твой AI-Менеджер. Могу проверить статус интеграций с маркетплейсами, помочь с настройкой или управлением товарами. Чем могу помочь?', 'bot');
+
+    const suggestions = [
+        { icon: '🚀', text: 'Настроить бота', msg: 'Хочу создать и настроить бота для моего бренда' },
+        { icon: '📊', text: 'Статистика за неделю', msg: 'Покажи статистику за неделю' },
+        { icon: '📦', text: 'Мои товары', msg: 'Покажи мои товары' },
+        { icon: '🔗', text: 'Подключить канал', msg: 'Как подключить новый канал?' },
+    ];
+    const row = document.createElement('div');
+    row.className = 'suggestions-inline';
+    row.id = 'greeting-suggestions';
+    suggestions.forEach(s => {
+        const chip = document.createElement('button');
+        chip.className = 'suggestion-chip';
+        chip.innerHTML = `<span>${s.icon}</span> ${escapeHtml(s.text)}`;
+        chip.addEventListener('click', () => {
+            row.remove();
+            sendMsg(s.msg);
+        });
+        row.appendChild(chip);
+    });
+    chatMessages.appendChild(row);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function addMsg(text, who, options = {}) {
@@ -799,13 +744,19 @@ function addMsg(text, who, options = {}) {
     const av = document.createElement('div');
     av.className = 'msg-avatar ' + who;
     if (who === 'bot') {
-        av.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg>';
+        av.innerHTML = '<svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="currentColor"/><circle cx="14.5" cy="11" r="1.5" fill="currentColor"/></svg>';
     } else {
         av.textContent = userEmail ? userEmail.charAt(0).toUpperCase() : 'U';
     }
 
     const c = document.createElement('div');
     c.className = 'msg-content';
+
+    const sender = document.createElement('div');
+    sender.className = 'msg-sender';
+    sender.textContent = who === 'bot' ? 'ИИ-Менеджер' : 'Вы';
+    c.appendChild(sender);
+
     const b = document.createElement('div');
     b.className = 'msg-bubble';
 
@@ -817,22 +768,23 @@ function addMsg(text, who, options = {}) {
         b.innerHTML = renderMarkdown(text);
     }
 
+    c.appendChild(b);
+
     const t = document.createElement('span');
     t.className = 'msg-time';
     t.textContent = timeNow();
-    c.appendChild(b);
     c.appendChild(t);
 
     if (who === 'bot' && !options.raw) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'msg-copy';
         copyBtn.title = 'Копировать';
-        copyBtn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"/></svg>';
+        copyBtn.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"/></svg>';
         copyBtn.onclick = () => {
             navigator.clipboard.writeText(text);
-            copyBtn.innerHTML = '<svg width="14" height="14" fill="none" stroke="#4ade80" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+            copyBtn.innerHTML = '<svg width="12" height="12" fill="none" stroke="#4ade80" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
             setTimeout(() => {
-                copyBtn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"/></svg>';
+                copyBtn.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"/></svg>';
             }, 2000);
         };
         c.appendChild(copyBtn);
@@ -846,7 +798,8 @@ function addMsg(text, who, options = {}) {
 }
 
 async function addMsgStreaming(text, who) {
-    const { bubble } = addMsg('', who);
+    const msgRef = addMsg('', who);
+    const { wrapper, bubble } = msgRef;
     bubble.classList.add('streaming-cursor');
     const words = text.split(/(\s+)/);
     let current = '';
@@ -857,6 +810,7 @@ async function addMsgStreaming(text, who) {
         await new Promise(r => setTimeout(r, 12 + Math.random() * 18));
     }
     bubble.classList.remove('streaming-cursor');
+    return { wrapper, bubble };
 }
 
 function showTyping() {
@@ -864,8 +818,8 @@ function showTyping() {
     w.className = 'msg-wrapper bot';
     w.id = 'typing';
     w.innerHTML = `
-        <div class="msg-avatar bot"><svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="#fff" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="#fff"/><circle cx="14.5" cy="11" r="1.5" fill="#fff"/></svg></div>
-        <div class="msg-content"><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
+        <div class="msg-avatar bot"><svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2v1a7 7 0 017 7v2a2 2 0 01-2 2h-1v2a4 4 0 01-4 4h-2a4 4 0 01-4-4v-2H7a2 2 0 01-2-2v-2a7 7 0 017-7V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5"/><circle cx="9.5" cy="11" r="1.5" fill="currentColor"/><circle cx="14.5" cy="11" r="1.5" fill="currentColor"/></svg></div>
+        <div class="msg-content"><div class="msg-sender">ИИ-Менеджер</div><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
     chatMessages.appendChild(w);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -882,8 +836,55 @@ async function apiPost(endpoint, body) {
     return r.json();
 }
 
+function renderProductCards(products) {
+    const container = document.createElement('div');
+    container.className = 'product-cards';
+    products.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+            <div class="product-card-icon">📦</div>
+            <div class="product-card-info">
+                <div class="product-card-name">${escapeHtml(p.name || 'Без названия')}</div>
+                <div class="product-card-meta">
+                    <span>Арт: ${escapeHtml(p.article)}</span>
+                    ${p.price ? `<span>Цена: ${escapeHtml(p.price)}</span>` : ''}
+                </div>
+            </div>
+            <div class="product-card-actions">
+                <button class="product-action-btn edit" data-article="${escapeHtml(p.article)}">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    Изменить
+                </button>
+                <button class="product-action-btn delete" data-article="${escapeHtml(p.article)}" data-name="${escapeHtml(p.name || '')}">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    Удалить
+                </button>
+            </div>`;
+        container.appendChild(card);
+    });
+
+    container.querySelectorAll('.product-action-btn.delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const article = btn.dataset.article;
+            const name = btn.dataset.name;
+            sendMsg(`Удали товар с артикулом ${article}${name ? ' (' + name + ')' : ''}`);
+        });
+    });
+    container.querySelectorAll('.product-action-btn.edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const article = btn.dataset.article;
+            chatInput.value = `Измени товар с артикулом ${article}: `;
+            chatInput.focus();
+        });
+    });
+
+    return container;
+}
+
 async function sendMsg(text) {
     startChat();
+    document.getElementById('greeting-suggestions')?.remove();
     addMsg(text, 'user');
     chatInput.value = '';
     chatInput.disabled = true;
@@ -892,7 +893,14 @@ async function sendMsg(text) {
     try {
         const data = await apiPost('/api/chat', { bot_id: BOT_ID, message: text, session_id: sessionId });
         hideTyping();
-        if (data?.reply) await addMsgStreaming(data.reply, 'bot');
+        if (data?.reply) {
+            const { wrapper } = await addMsgStreaming(data.reply, 'bot');
+            if (data.products && data.products.length > 0) {
+                const cards = renderProductCards(data.products);
+                wrapper.querySelector('.msg-content').appendChild(cards);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
     } catch (err) {
         hideTyping();
         addMsg('Ошибка: ' + err.message, 'bot', { raw: true });
@@ -903,19 +911,19 @@ async function sendMsg(text) {
     }
 }
 
+chatInput.addEventListener('input', () => {
+    const sendBtn = document.getElementById('chat-send-btn');
+    if (chatInput.value.trim()) sendBtn.classList.add('has-text');
+    else sendBtn.classList.remove('has-text');
+});
+
 chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
     if (text) sendMsg(text);
+    document.getElementById('chat-send-btn').classList.remove('has-text');
 });
 
-document.querySelectorAll('.quick-chip').forEach(chip => {
-    chip.addEventListener('click', () => sendMsg(chip.dataset.text));
-});
-
-document.querySelectorAll('.suggestion-card').forEach(card => {
-    card.addEventListener('click', () => sendMsg(card.dataset.text));
-});
 
 document.getElementById('chat-fullscreen-btn').addEventListener('click', () => {
     const container = document.getElementById('chat-container');
@@ -933,12 +941,12 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-document.getElementById('chat-clear-btn').addEventListener('click', () => {
+document.getElementById('chat-clear-btn').addEventListener('click', async () => {
+    try {
+        await apiPost('/api/chat/reset', { bot_id: BOT_ID, session_id: sessionId });
+    } catch(e) { console.warn('Reset error:', e); }
     chatStarted = false;
     chatMessages.innerHTML = '';
-    document.getElementById('chat-welcome').style.display = 'flex';
-    chatMessages.style.display = 'none';
-    document.getElementById('quick-actions').style.display = 'none';
     sessionId = crypto.randomUUID();
     localStorage.setItem('nextbot_session', sessionId);
     initChat();
@@ -947,8 +955,9 @@ document.getElementById('chat-clear-btn').addEventListener('click', () => {
 async function initChat() {
     try {
         const data = await apiPost('/api/chat/init', { bot_id: BOT_ID, session_id: sessionId });
-        if (data?.reply) initReply = data.reply;
+        // greeting handled by playGreeting()
     } catch (e) { console.error('Init error:', e); }
+    playGreeting();
 }
 
 // ===== APEXCHARTS =====
@@ -1025,108 +1034,6 @@ window.barChart = new ApexCharts(document.querySelector('#chart-bar'), {
 });
 window.barChart.render();
 
-// ===== SWITCHABLE ANALYTICS CHART =====
-window.tabData = {
-    analytics: {
-        sums: [
-            { val: '0', label: 'Диалогов' },
-            { val: '0', label: 'Сообщений' },
-            { val: '—', label: 'Рост за неделю' },
-        ],
-        series: [
-            { name: 'Вопросы', data: [0, 0, 0, 0, 0, 0, 0] },
-            { name: 'Отзывы', data: [0, 0, 0, 0, 0, 0, 0] },
-        ],
-        colors: ['#3b82f6', '#22c55e'],
-        type: 'area',
-    },
-    ads: {
-        sums: [
-            { val: '38 400 ₽', label: 'Потрачено' },
-            { val: '12 640', label: 'Кликов' },
-            { val: '3.04 ₽', label: 'Цена клика' },
-        ],
-        series: [
-            { name: 'Расход, ₽', data: [4200, 5800, 6100, 5400, 6300, 5900, 4700] },
-            { name: 'Клики', data: [1400, 1900, 2100, 1800, 2200, 1900, 1340] },
-        ],
-        colors: ['#f43f5e', '#f59e0b'],
-        type: 'area',
-    },
-    views: {
-        sums: [
-            { val: '84.3k', label: 'Показов' },
-            { val: '12.6k', label: 'Переходов' },
-            { val: '14.9%', label: 'CTR' },
-        ],
-        series: [
-            { name: 'Показы', data: [9200, 12400, 13100, 11800, 14200, 12900, 10700] },
-            { name: 'Переходы', data: [1300, 1900, 2000, 1700, 2200, 1800, 1700] },
-        ],
-        colors: ['#8b5cf6', '#06b6d4'],
-        type: 'bar',
-    },
-    conversion: {
-        sums: [
-            { val: '3.2%', label: 'CR общая' },
-            { val: '487', label: 'Заявок' },
-            { val: '+0.4%', label: 'Рост CR' },
-        ],
-        series: [
-            { name: 'Конверсия, %', data: [2.8, 3.1, 3.4, 2.9, 3.5, 3.6, 3.2] },
-        ],
-        colors: ['#10b981'],
-        type: 'line',
-    },
-};
-
-let switchChart = null;
-function renderSwitchable(key) {
-    const d = window.tabData[key];
-    document.getElementById('sum-1').textContent = d.sums[0].val;
-    document.getElementById('sum-1-label').textContent = d.sums[0].label;
-    document.getElementById('sum-2').textContent = d.sums[1].val;
-    document.getElementById('sum-2-label').textContent = d.sums[1].label;
-    document.getElementById('sum-3').textContent = d.sums[2].val;
-    document.getElementById('sum-3-label').textContent = d.sums[2].label;
-
-    if (switchChart) switchChart.destroy();
-
-    const opts = {
-        chart: { type: d.type, height: 300, background: 'transparent', toolbar: { show: false }, fontFamily: 'Inter, sans-serif', animations: { enabled: true, easing: 'easeinout', speed: 600 } },
-        theme: { mode: 'dark' },
-        series: d.series,
-        xaxis: { categories: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] },
-        colors: d.colors,
-        stroke: { curve: 'smooth', width: d.type === 'bar' ? 0 : 3 },
-        grid: { borderColor: '#27272a', strokeDashArray: 4 },
-        dataLabels: { enabled: false },
-        tooltip: { theme: 'dark' },
-        legend: { position: 'bottom', labels: { colors: '#a1a1aa' } },
-    };
-
-    if (d.type === 'area') {
-        opts.fill = { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } };
-    }
-    if (d.type === 'bar') {
-        opts.plotOptions = { bar: { borderRadius: 6, columnWidth: '45%' } };
-    }
-    if (d.type === 'line') {
-        opts.markers = { size: 5, strokeWidth: 0 };
-    }
-
-    switchChart = new ApexCharts(document.querySelector('#chart-switchable'), opts);
-    switchChart.render();
-}
-
-document.querySelectorAll('.analytics-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('.analytics-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        renderSwitchable(tab.dataset.tab);
-    });
-});
-renderSwitchable('analytics');
 
 // ===== FILE UPLOAD =====
 document.getElementById('file-upload').addEventListener('change', async function() {
@@ -1155,6 +1062,70 @@ document.getElementById('file-upload').addEventListener('change', async function
     } catch (err) {
         list.innerHTML = '<div class="text-sm text-red-400 text-center py-6">Ошибка: ' + err.message + '</div>';
     }
+});
+
+// ===== EXCEL EXPORT / IMPORT =====
+document.getElementById('export-excel-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('export-excel-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = 'Экспорт...';
+    btn.disabled = true;
+    
+    try {
+        const r = await fetch(`${API}/api/knowledge/products/export?bot_id=${BOT_ID}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!r.ok) throw new Error('Ошибка экспорта');
+        
+        const blob = await r.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `products_${BOT_ID}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (err) {
+        alert('Ошибка при скачивании: ' + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('import-excel-upload').addEventListener('change', async function() {
+    const file = this.files[0];
+    if (!file) return;
+    
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('bot_id', BOT_ID);
+    
+    const list = document.getElementById('files-list');
+    list.innerHTML = '<div class="text-sm text-emerald-400 text-center py-6">Импорт товаров из Excel...</div>';
+    
+    try {
+        const r = await fetch(`${API}/api/knowledge/products/import`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: fd,
+        });
+        const data = await r.json();
+        if (r.ok) {
+            list.innerHTML = `<div class="flex items-center justify-between p-4 rounded-lg" style="background:#132e1a;border:1px solid #22543d">
+                <span class="text-sm font-medium text-emerald-400">Импорт завершен</span>
+                <span class="text-xs text-emerald-600">${data.imported_count} товаров</span>
+            </div>`;
+        } else {
+            list.innerHTML = '<div class="text-sm text-red-400 text-center py-6">' + (data.detail || 'Ошибка') + '</div>';
+        }
+    } catch (err) {
+        list.innerHTML = '<div class="text-sm text-red-400 text-center py-6">Ошибка: ' + err.message + '</div>';
+    }
+    
+    this.value = ''; // reset
 });
 </script>
 </body>

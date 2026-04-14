@@ -150,3 +150,100 @@ class QdrantRetrieverAdapter(KnowledgeRetriever):
         except Exception as e:
             logger.error(f"[QdrantAdapter] Ошибка поиска: {e}")
             return []
+
+    def delete_by_source(self, source: str) -> bool:
+        """
+        Удаляет все векторы из коллекции, у которых в metadata.source указано заданное значение.
+        Это нужно для очистки старых товаров перед новой синхронизацией.
+        """
+        from qdrant_client.http import models
+        
+        logger.info(f"[QdrantAdapter] Удаление векторов с source='{source}' из коллекции {self.collection_name}...")
+        try:
+            # В LangChain Qdrant метаданные хранятся внутри поля payload.metadata
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="metadata.source",
+                            match=models.MatchValue(value=source),
+                        )
+                    ]
+                ),
+            )
+            logger.info(f"[QdrantAdapter] Векторы с source='{source}' успешно удалены.")
+            return True
+        except Exception as e:
+            logger.error(f"[QdrantAdapter] Ошибка при удалении векторов по source: {e}", exc_info=True)
+            return False
+
+    def delete_by_id(self, point_id: str) -> bool:
+        """
+        Удаляет конкретный вектор по его ID.
+        """
+        logger.info(f"[QdrantAdapter] Удаление вектора с ID='{point_id}' из коллекции {self.collection_name}...")
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=[point_id]
+            )
+            logger.info(f"[QdrantAdapter] Вектор с ID='{point_id}' успешно удален.")
+            return True
+        except Exception as e:
+            logger.error(f"[QdrantAdapter] Ошибка при удалении вектора по ID: {e}", exc_info=True)
+            return False
+
+    def get_all_products(self) -> List[dict]:
+        """
+        Возвращает все товары из коллекции (doc_type='product' или source='manual'/'wildberries'/'ozon').
+        """
+        from qdrant_client.http import models
+        
+        logger.info(f"[QdrantAdapter] Получение всех товаров из коллекции {self.collection_name}...")
+        all_points = []
+        offset = None
+        
+        try:
+            while True:
+                response = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=models.Filter(
+                        should=[
+                            models.FieldCondition(
+                                key="metadata.doc_type",
+                                match=models.MatchValue(value="product"),
+                            ),
+                            models.FieldCondition(
+                                key="metadata.source",
+                                match=models.MatchValue(value="manual"),
+                            )
+                        ]
+                    ),
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
+                points, offset = response
+                for point in points:
+                    payload = point.payload or {}
+                    metadata = payload.get("metadata", {})
+                    page_content = payload.get("page_content", "")
+                    
+                    all_points.append({
+                        "id": point.id,
+                        "content": page_content,
+                        "source": metadata.get("source", "unknown"),
+                        "metadata": metadata
+                    })
+                    
+                if offset is None:
+                    break
+                    
+            logger.info(f"[QdrantAdapter] Найдено {len(all_points)} товаров.")
+            return all_points
+        except Exception as e:
+            logger.error(f"[QdrantAdapter] Ошибка при получении всех товаров: {e}", exc_info=True)
+            return []

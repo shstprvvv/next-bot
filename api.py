@@ -6,7 +6,7 @@ import asyncio
 from typing import List, Optional, Dict
 
 import aiohttp
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,7 @@ from app.adapters.llm.langchain_adapter import LangChainLLMAdapter
 from app.adapters.retriever.qdrant_adapter import QdrantRetrieverAdapter
 from app.core.scenarios.universal_graph import UniversalScenarioGraph
 from app.core.scenarios.onboarding.graph import OnboardingScenarioGraph
+from app.core.scenarios.admin.graph import AdminBotGraph
 from app.adapters.openai_assistants.adapter import OpenAIAssistantsAdapter
 from app.core.config.bots_registry import BOTS_REGISTRY
 from app.core.knowledge_manager import KnowledgeManager
@@ -81,6 +82,7 @@ app.add_middleware(
 # Теперь мы храним графы для всех ботов
 scenario_graphs: Dict[str, UniversalScenarioGraph] = {}
 onboarding_graph: Optional[OnboardingScenarioGraph] = None
+admin_bot_graph: Optional[AdminBotGraph] = None
 assistants_adapter: Optional[OpenAIAssistantsAdapter] = None
 knowledge_manager: Optional[KnowledgeManager] = None
 llm_adapter: Optional[LangChainLLMAdapter] = None
@@ -96,7 +98,7 @@ TESTING = os.getenv("TESTING", "").lower() in ("1", "true")
 
 @app.on_event("startup")
 async def startup_event():
-    global scenario_graphs, redis_client, onboarding_graph, assistants_adapter, knowledge_manager, llm_adapter
+    global scenario_graphs, redis_client, onboarding_graph, admin_bot_graph, assistants_adapter, knowledge_manager, llm_adapter
 
     if TESTING:
         logger.info("Запуск в тестовом режиме — пропуск внешних сервисов")
@@ -127,6 +129,7 @@ async def startup_event():
         )
 
         onboarding_graph = OnboardingScenarioGraph(llm_adapter, assistants_adapter)
+        admin_bot_graph = AdminBotGraph(llm_adapter)
 
         knowledge_manager = KnowledgeManager(
             openai_api_key=cfg.get("OPENAI_API_KEY"),
@@ -165,8 +168,14 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: str = Field(..., min_length=1, max_length=128)
 
+class ProductAction(BaseModel):
+    article: str = ""
+    name: str = ""
+    price: str = ""
+
 class ChatResponse(BaseModel):
     reply: str
+    products: Optional[List[ProductAction]] = None
 
 class InitRequest(BaseModel):
     bot_id: str = Field(..., min_length=1, max_length=128)
@@ -245,9 +254,9 @@ async def save_session_history(session_key: str, history: List[str], state: dict
     if not redis_client:
         return
 
-    # Ограничиваем историю последними 20 сообщениями
-    if len(history) > 20:
-        history = history[-20:]
+    # Ограничиваем историю последними 10 сообщениями (5 пар вопрос-ответ)
+    if len(history) > 10:
+        history = history[-10:]
 
     await redis_client.setex(
         name=session_key,
@@ -262,6 +271,16 @@ async def save_session_history(session_key: str, history: List[str], state: dict
             value=json.dumps(state)
         )
 
+@app.post("/api/chat/reset")
+@limiter.limit("30/minute")
+async def reset_chat_endpoint(request: Request, body: InitRequest, current_user: User = Depends(get_current_user)):
+    """Полностью сбрасывает сессию чата: удаляет историю и стейт из Redis."""
+    session_key = f"session:{body.bot_id}:{body.session_id}"
+    if redis_client:
+        await redis_client.delete(session_key)
+        await redis_client.delete(f"state:{session_key}")
+    return {"status": "ok", "message": "Сессия сброшена"}
+
 @app.post("/api/chat/init", response_model=ChatResponse)
 @limiter.limit("30/minute")
 async def init_endpoint(request: Request, body: InitRequest, current_user: User = Depends(get_current_user)):
@@ -269,11 +288,24 @@ async def init_endpoint(request: Request, body: InitRequest, current_user: User 
     bot_id = body.bot_id
     session_key = f"session:{bot_id}:{body.session_id}"
 
+    # При инициализации всегда начинаем с чистой истории
+    if redis_client:
+        await redis_client.delete(session_key)
+        await redis_client.delete(f"state:{session_key}")
+
     # Специальная логика для Бота-Онбордера
     if bot_id == "creator_bot":
         greeting = "Привет! 👋 Я ИИ-архитектор. Я помогу вам создать собственного умного бота для вашего бизнеса за пару минут. Как называется ваша компания или продукт?"
         history = [f"Бот: {greeting}"]
         await save_session_history(session_key, history, state={"step": "collect_name"})
+        return ChatResponse(reply=greeting)
+
+    # Логика для Admin Bot
+    if bot_id == "admin_bot":
+        client_id = current_user.client_id or "next"
+        greeting = "Привет! 👋 Я твой AI-Менеджер. Я могу проверить статус твоих интеграций с маркетплейсами или помочь с настройкой. Чем могу помочь?"
+        history = [f"Бот: {greeting}"]
+        await save_session_history(session_key, history)
         return ChatResponse(reply=greeting)
 
     # Логика для обычных ботов
@@ -331,7 +363,45 @@ async def chat_endpoint(request: Request, body: ChatRequest, current_user: User 
             logger.error(f"Ошибка при обработке запроса онбординга: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-    # 2. Логика для ботов из Assistants API (если bot_id начинается с 'asst_')
+    # 2. Логика для Admin Bot
+    if bot_id == "admin_bot":
+        if not admin_bot_graph:
+            raise HTTPException(status_code=500, detail="Admin Bot не инициализирован")
+            
+        client_id = current_user.client_id or "next"
+        
+        try:
+            result = await admin_bot_graph.execute(
+                question=body.message,
+                client_id=client_id,
+                history=formatted_history,
+                session_id=body.session_id
+            )
+            
+            response_text = result["text"]
+            raw_products = result.get("products", [])
+            
+            products = None
+            valid_products = [p for p in raw_products if p.get("article")]
+            if valid_products:
+                products = [
+                    ProductAction(
+                        article=p.get("article", ""),
+                        name=p.get("name", ""),
+                        price=p.get("price", "")
+                    ) for p in valid_products
+                ]
+            
+            formatted_history.append(f"Клиент: {body.message}")
+            formatted_history.append(f"Бот: {response_text}")
+            await save_session_history(session_key, formatted_history)
+            
+            return ChatResponse(reply=response_text, products=products)
+        except Exception as e:
+            logger.error(f"Ошибка при обработке запроса admin_bot: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
+
+    # 3. Логика для ботов из Assistants API (если bot_id начинается с 'asst_')
     if bot_id.startswith("asst_"):
         if not assistants_adapter:
             raise HTTPException(status_code=500, detail="Assistants Adapter не инициализирован")
@@ -468,25 +538,28 @@ class WBSyncRequest(BaseModel):
 async def sync_wb_products(
     request: Request,
     body: WBSyncRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Синхронизация товаров с Wildberries по API ключу"""
+    """Синхронизация товаров с Wildberries по API ключу (в фоне)"""
     if not knowledge_manager:
         raise HTTPException(status_code=500, detail="Менеджер знаний не инициализирован")
         
     try:
-        products_count = await knowledge_manager.sync_wb_products(
+        # Запускаем долгую задачу в фоне
+        background_tasks.add_task(
+            knowledge_manager.sync_wb_products,
             bot_id=body.bot_id,
             wb_api_key=body.wb_api_key
         )
         
         return {
             "status": "success",
-            "message": f"Успешно загружено {products_count} товаров с Wildberries",
-            "products_added": products_count
+            "message": "Синхронизация товаров с Wildberries запущена в фоновом режиме. Это может занять несколько минут.",
+            "products_added": "in_progress"
         }
     except Exception as e:
-        logger.error(f"Ошибка при синхронизации с WB: {e}", exc_info=True)
+        logger.error(f"Ошибка при запуске синхронизации с WB: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка синхронизации: {str(e)}")
 
 class OzonSyncRequest(BaseModel):
@@ -499,14 +572,17 @@ class OzonSyncRequest(BaseModel):
 async def sync_ozon_products(
     request: Request,
     body: OzonSyncRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Синхронизация товаров с Ozon по API ключу"""
+    """Синхронизация товаров с Ozon по API ключу (в фоне)"""
     if not knowledge_manager:
         raise HTTPException(status_code=500, detail="Менеджер знаний не инициализирован")
         
     try:
-        products_count = await knowledge_manager.sync_ozon_products(
+        # Запускаем долгую задачу в фоне
+        background_tasks.add_task(
+            knowledge_manager.sync_ozon_products,
             bot_id=body.bot_id,
             ozon_client_id=body.ozon_client_id,
             ozon_api_key=body.ozon_api_key
@@ -514,12 +590,68 @@ async def sync_ozon_products(
         
         return {
             "status": "success",
-            "message": f"Успешно загружено {products_count} товаров с Ozon",
-            "products_added": products_count
+            "message": "Синхронизация товаров с Ozon запущена в фоновом режиме. Это может занять несколько минут.",
+            "products_added": "in_progress"
         }
     except Exception as e:
-        logger.error(f"Ошибка при синхронизации с Ozon: {e}", exc_info=True)
+        logger.error(f"Ошибка при запуске синхронизации с Ozon: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка синхронизации: {str(e)}")
+
+from fastapi.responses import FileResponse
+
+@app.get("/api/knowledge/products/export")
+@limiter.limit("5/minute")
+async def export_products(
+    request: Request,
+    bot_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    if not knowledge_manager:
+        raise HTTPException(status_code=500, detail="Менеджер знаний не инициализирован")
+        
+    try:
+        file_path = knowledge_manager.export_products_to_excel(bot_id)
+        return FileResponse(
+            path=file_path, 
+            filename=f"products_{bot_id}.xlsx", 
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при экспорте товаров: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка экспорта: {str(e)}")
+
+@app.post("/api/knowledge/products/import")
+@limiter.limit("5/minute")
+async def import_products(
+    request: Request,
+    bot_id: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    if not knowledge_manager:
+        raise HTTPException(status_code=500, detail="Менеджер знаний не инициализирован")
+        
+    temp_dir = "temp_uploads"
+    os.makedirs(temp_dir, exist_ok=True)
+    file_location = os.path.join(temp_dir, file.filename)
+    
+    try:
+        with open(file_location, "wb+") as file_object:
+            file_object.write(await file.read())
+            
+        count = await knowledge_manager.import_products_from_excel(bot_id, file_location)
+        
+        return {
+            "status": "success",
+            "message": f"Успешно импортировано {count} товаров.",
+            "imported_count": count
+        }
+    except Exception as e:
+        logger.error(f"Ошибка при импорте товаров: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка импорта: {str(e)}")
+    finally:
+        if os.path.exists(file_location):
+            os.remove(file_location)
 
 @app.get("/api/knowledge/files")
 @limiter.limit("20/minute")
